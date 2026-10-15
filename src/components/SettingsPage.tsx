@@ -5,6 +5,7 @@ import { GameSettings } from '../types/game';
 import { sound } from '../services/sound';
 
 export const SettingsPage: React.FC = () => {
+  const profile = storage.getProfile();
   const [settings, setSettings] = useState<GameSettings>(storage.getSettings());
   const [savedBanner, setSavedBanner] = useState(false);
   const [draggingTarget, setDraggingTarget] = useState<'joystick' | 'jump' | 'switch' | null>(null);
@@ -213,7 +214,7 @@ export const SettingsPage: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-4 text-xs">
             <div className="p-4 rounded-2xl bg-slate-800/40 border border-slate-700/60">
-              <div className="font-bold text-blue-400 mb-2">Player 1 (Boyfriend Leo)</div>
+              <div className="font-bold text-blue-400 mb-2">Player 1 ({profile.boyName || 'Boyfriend'})</div>
               <div className="space-y-1.5 text-slate-300">
                 <div className="flex justify-between"><span>Forward:</span> <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded">W</span></div>
                 <div className="flex justify-between"><span>Backward:</span> <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded">S</span></div>
@@ -223,7 +224,7 @@ export const SettingsPage: React.FC = () => {
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-800/40 border border-slate-700/60">
-              <div className="font-bold text-rose-400 mb-2">Player 2 (Girlfriend Maya)</div>
+              <div className="font-bold text-rose-400 mb-2">Player 2 ({profile.girlName || 'Girlfriend'})</div>
               <div className="space-y-1.5 text-slate-300">
                 <div className="flex justify-between"><span>Forward:</span> <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded">Up Arrow</span></div>
                 <div className="flex justify-between"><span>Backward:</span> <span className="font-mono bg-slate-800 px-1.5 py-0.5 rounded">Down Arrow</span></div>
@@ -234,7 +235,7 @@ export const SettingsPage: React.FC = () => {
           </div>
 
           <div className="p-3 bg-slate-800/30 rounded-xl border border-slate-800 text-[11px] text-slate-400">
-            Tip: In Solo Mode, press <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-white font-mono">Tab</kbd> to switch between controlling Leo and Maya anytime!
+            Tip: In Solo Mode, press <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-white font-mono">Tab</kbd> to switch between controlling {profile.boyName || 'Boyfriend'} and {profile.girlName || 'Girlfriend'} anytime!
           </div>
         </div>
 

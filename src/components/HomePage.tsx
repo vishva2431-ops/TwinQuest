@@ -148,7 +148,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           </h1>
 
           <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
-            Take control of <strong className="text-blue-400">Boyfriend (Leo)</strong> and <strong className="text-rose-400">Girlfriend (Maya)</strong> in a breathtaking 3D adventure inspired by the surprise traps of <em>Level Devil</em>. Trust each other, survive unexpected hazards, and reach the heart portal together!
+            Take control of <strong className="text-blue-400">{profile.boyName || 'Boyfriend'}</strong> and <strong className="text-rose-400">{profile.girlName || 'Girlfriend'}</strong> in a breathtaking 3D adventure inspired by the surprise traps of <em>Level Devil</em>. Trust each other, survive unexpected hazards, and reach the heart portal together!
           </p>
 
           {/* Quick Play CTAs */}
@@ -183,7 +183,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               className="w-full sm:w-auto px-5 py-4 rounded-2xl bg-slate-800/50 hover:bg-slate-800 text-slate-300 font-semibold text-xs border border-slate-700/60 transition-all active:scale-95 flex items-center justify-center gap-1.5"
             >
               <Sparkles className="w-4 h-4 text-amber-400" />
-              <span>Costumes</span>
+              <span>Costumes & Names</span>
             </button>
           </div>
         </div>
@@ -196,7 +196,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           />
           <div className="text-[11px] text-slate-400 mt-3 flex items-center gap-1.5 font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span>Boyfriend Leo & Girlfriend Maya • Live 3D Rig</span>
+            <span>{profile.boyName || 'Boyfriend'} & {profile.girlName || 'Girlfriend'} • Live 3D Rig</span>
           </div>
         </div>
       </div>

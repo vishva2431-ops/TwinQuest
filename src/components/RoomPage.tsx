@@ -178,12 +178,12 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
 
             {/* 2 Player Character Slots (Boyfriend & Girlfriend) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Slot 1: Boyfriend (Leo) */}
+              {/* Slot 1: Boyfriend */}
               <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl flex flex-col justify-between min-h-[220px]">
                 <div className="flex items-start justify-between">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400">
-                      Slot 1 • Boyfriend (Leo)
+                      Slot 1 • Boyfriend ({profile.boyName || 'Boyfriend'})
                     </span>
                     <h3 className="text-base font-bold text-white mt-0.5">
                       {room.player1?.username || 'Waiting for host...'}
@@ -204,7 +204,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
                 <div className="my-4 p-4 rounded-2xl bg-blue-950/20 border border-blue-800/30 text-xs text-blue-200 flex items-center gap-2">
                   <span className="text-xl">👦</span>
                   <div>
-                    <div className="font-bold">Boyfriend Character</div>
+                    <div className="font-bold">Boyfriend ({profile.boyName || 'Boyfriend'})</div>
                     <div className="text-[11px] text-blue-300/70">Movement: WASD / Space Jump</div>
                   </div>
                 </div>
@@ -219,12 +219,12 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
                 )}
               </div>
 
-              {/* Slot 2: Girlfriend (Maya) */}
+              {/* Slot 2: Girlfriend */}
               <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl flex flex-col justify-between min-h-[220px]">
                 <div className="flex items-start justify-between">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400">
-                      Slot 2 • Girlfriend (Maya)
+                      Slot 2 • Girlfriend ({profile.girlName || 'Girlfriend'})
                     </span>
                     <h3 className="text-base font-bold text-white mt-0.5">
                       {room.player2?.username || 'Waiting for Partner...'}
@@ -251,7 +251,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
                 <div className="my-4 p-4 rounded-2xl bg-rose-950/20 border border-rose-800/30 text-xs text-rose-200 flex items-center gap-2">
                   <span className="text-xl">👧</span>
                   <div>
-                    <div className="font-bold">Girlfriend Character</div>
+                    <div className="font-bold">Girlfriend ({profile.girlName || 'Girlfriend'})</div>
                     <div className="text-[11px] text-rose-300/70">Movement: Arrows / RShift Jump</div>
                   </div>
                 </div>

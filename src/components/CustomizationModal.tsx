@@ -44,12 +44,21 @@ export const CustomizationModal: React.FC<CustomizationModalProps> = ({
   onSaveProfile
 }) => {
   const [selectedGender, setSelectedGender] = useState<CharacterGender>(profile.activeCharacter);
+  const [boyName, setBoyName] = useState(profile.boyName || 'Boyfriend');
+  const [girlName, setGirlName] = useState(profile.girlName || 'Girlfriend');
+  const [username, setUsername] = useState(profile.username || 'Adventurer');
   const [custom, setCustom] = useState<CharacterCustomization>(
     selectedGender === 'boy' ? { ...profile.boyCustomization } : { ...profile.girlCustomization }
   );
 
   const previewMountRef = useRef<HTMLDivElement>(null);
   const rigRef = useRef<CharacterRig | null>(null);
+
+  useEffect(() => {
+    setBoyName(profile.boyName || 'Boyfriend');
+    setGirlName(profile.girlName || 'Girlfriend');
+    setUsername(profile.username || 'Adventurer');
+  }, [profile]);
 
   // Update current custom state when switching gender
   useEffect(() => {
@@ -149,8 +158,13 @@ export const CustomizationModal: React.FC<CustomizationModalProps> = ({
 
   const handleSave = () => {
     sound.playButtonClick();
-    const updated = { ...profile };
-    updated.activeCharacter = selectedGender;
+    const updated = {
+      ...profile,
+      username: username.trim() || 'Adventurer',
+      boyName: boyName.trim() || 'Boyfriend',
+      girlName: girlName.trim() || 'Girlfriend',
+      activeCharacter: selectedGender
+    };
     if (selectedGender === 'boy') {
       updated.boyCustomization = custom;
     } else {
@@ -175,7 +189,7 @@ export const CustomizationModal: React.FC<CustomizationModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg font-bold text-white font-serif">Character Studio</h2>
-              <p className="text-xs text-slate-400">Customize Boyfriend (Leo) & Girlfriend (Maya)</p>
+              <p className="text-xs text-slate-400">Rename & Customize Boyfriend & Girlfriend</p>
             </div>
           </div>
 
@@ -201,26 +215,26 @@ export const CustomizationModal: React.FC<CustomizationModalProps> = ({
                   sound.playButtonClick();
                   setSelectedGender('boy');
                 }}
-                className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                className={`flex-1 py-2 px-2 rounded-xl text-xs font-bold transition-all truncate ${
                   selectedGender === 'boy'
                     ? 'bg-blue-600 text-white shadow-md'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                Leo (Boyfriend)
+                {boyName || 'Boyfriend'}
               </button>
               <button
                 onClick={() => {
                   sound.playButtonClick();
                   setSelectedGender('girl');
                 }}
-                className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                className={`flex-1 py-2 px-2 rounded-xl text-xs font-bold transition-all truncate ${
                   selectedGender === 'girl'
                     ? 'bg-rose-600 text-white shadow-md'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                Maya (Girlfriend)
+                {girlName || 'Girlfriend'}
               </button>
             </div>
 
@@ -237,6 +251,46 @@ export const CustomizationModal: React.FC<CustomizationModalProps> = ({
 
           {/* Right: Customization Controls */}
           <div className="w-full md:w-7/12 p-6 space-y-6 overflow-y-auto">
+            {/* Character & Player Names Section */}
+            <div className="p-4 rounded-2xl bg-slate-800/40 border border-slate-700/60 space-y-3">
+              <div className="text-xs font-bold text-rose-400 uppercase tracking-wider">
+                Character Identity
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-300 block mb-1">
+                    {selectedGender === 'boy' ? 'Boyfriend Character Name' : 'Girlfriend Character Name'}
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedGender === 'boy' ? boyName : girlName}
+                    onChange={(e) => {
+                      if (selectedGender === 'boy') {
+                        setBoyName(e.target.value);
+                      } else {
+                        setGirlName(e.target.value);
+                      }
+                    }}
+                    placeholder={selectedGender === 'boy' ? 'Enter boy name...' : 'Enter girl name...'}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-300 block mb-1">
+                    Player Profile Name
+                  </label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Enter player name..."
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Outfits / Costumes */}
             <div>
               <label className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2 mb-3">
@@ -453,7 +507,7 @@ export const CustomizationModal: React.FC<CustomizationModalProps> = ({
         {/* Modal Footer */}
         <div className="p-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between">
           <div className="text-xs text-slate-400">
-            Playing as: <span className="font-bold text-white capitalize">{selectedGender}</span>
+            Playing as: <span className="font-bold text-white capitalize">{selectedGender === 'boy' ? (boyName || 'Boyfriend') : (girlName || 'Girlfriend')}</span>
           </div>
 
           <div className="flex gap-3">

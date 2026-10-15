@@ -22,6 +22,8 @@ export interface PlayerProfile {
   username: string;
   email?: string;
   isGuest: boolean;
+  boyName: string;
+  girlName: string;
   activeCharacter: CharacterGender;
   boyCustomization: CharacterCustomization;
   girlCustomization: CharacterCustomization;

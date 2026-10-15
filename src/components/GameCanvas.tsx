@@ -453,7 +453,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                   : 'bg-slate-800/80 text-slate-400 hover:text-white'
               }`}
             >
-              <span>Leo</span>
+              <span>{profile.boyName || 'Boyfriend'}</span>
               <span className="text-[10px] opacity-75">(WASD)</span>
             </button>
 
@@ -468,7 +468,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                   : 'bg-slate-800/80 text-slate-400 hover:text-white'
               }`}
             >
-              <span>Maya</span>
+              <span>{profile.girlName || 'Girlfriend'}</span>
               <span className="text-[10px] opacity-75">(WASD)</span>
             </button>
           </div>
@@ -477,8 +477,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         {/* In Local Co-Op Mode: Key Guide */}
         {controlMode === 'local_coop' && (
           <div className="hidden md:flex items-center gap-3 text-[11px] text-slate-400 pl-2 border-l border-slate-700">
-            <div><span className="text-blue-400 font-bold">Leo:</span> WASD + Space</div>
-            <div><span className="text-rose-400 font-bold">Maya:</span> Arrows + RShift</div>
+            <div><span className="text-blue-400 font-bold">{profile.boyName || 'Boyfriend'}:</span> WASD + Space</div>
+            <div><span className="text-rose-400 font-bold">{profile.girlName || 'Girlfriend'}:</span> Arrows + RShift</div>
           </div>
         )}
       </div>
@@ -552,9 +552,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 setActivePlayer(next);
                 sound.playButtonClick();
               }}
-              className="w-14 h-14 rounded-full bg-slate-900/80 border border-slate-600 text-white text-xs font-bold shadow-lg flex items-center justify-center active:scale-90 transition-transform"
+              className="w-14 h-14 rounded-full bg-slate-900/80 border border-slate-600 text-white text-[11px] font-bold shadow-lg flex items-center justify-center active:scale-90 transition-transform px-1 text-center truncate"
             >
-              {activePlayer === 'boy' ? 'Maya 👧' : 'Leo 👦'}
+              {activePlayer === 'boy' ? `${profile.girlName || 'Girl'} 👧` : `${profile.boyName || 'Boy'} 👦`}
             </button>
           </div>
         </>
@@ -572,7 +572,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               STAGE CLEAR!
             </h2>
             <p className="text-xs text-rose-200 mt-1 mb-6">
-              Boyfriend and Girlfriend completed the trial together!
+              {profile.boyName || 'Boyfriend'} & {profile.girlName || 'Girlfriend'} completed the trial together!
             </p>
 
             {/* Stars Rating */}

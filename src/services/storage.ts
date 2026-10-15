@@ -249,7 +249,10 @@ export const DEFAULT_SETTINGS: GameSettings = {
 const INITIAL_PROFILE: PlayerProfile = {
   id: 'usr_tq_' + Math.random().toString(36).substring(2, 8),
   username: 'Adventurer',
+  email: '',
   isGuest: true,
+  boyName: 'Leo',
+  girlName: 'Maya',
   activeCharacter: 'boy',
   boyCustomization: DEFAULT_BOY_CUSTOM,
   girlCustomization: DEFAULT_GIRL_CUSTOM,
@@ -264,37 +267,7 @@ const INITIAL_PROFILE: PlayerProfile = {
   musicEnabled: true
 };
 
-const INITIAL_FRIENDS: FriendItem[] = [
-  {
-    id: 'fnd_101',
-    username: 'Aria_Star',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-    status: 'online',
-    character: 'girl',
-    currentRoomId: 'TWIN-99'
-  },
-  {
-    id: 'fnd_102',
-    username: 'Kai_Ranger',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-    status: 'in_game',
-    character: 'boy'
-  },
-  {
-    id: 'fnd_103',
-    username: 'Luna_Quest',
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&q=80',
-    status: 'online',
-    character: 'girl'
-  },
-  {
-    id: 'fnd_104',
-    username: 'Ethan_Vault',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
-    status: 'offline',
-    character: 'boy'
-  }
-];
+const INITIAL_FRIENDS: FriendItem[] = [];
 
 class StorageService {
   private profileKey = 'twinquest_profile_v1';
@@ -306,7 +279,15 @@ class StorageService {
   public getProfile(): PlayerProfile {
     try {
       const data = localStorage.getItem(this.profileKey);
-      if (data) return JSON.parse(data);
+      if (data) {
+        const parsed = JSON.parse(data);
+        return {
+          ...INITIAL_PROFILE,
+          ...parsed,
+          boyName: parsed.boyName || 'Boyfriend',
+          girlName: parsed.girlName || 'Girlfriend'
+        };
+      }
     } catch {
       // fallback
     }
@@ -464,26 +445,7 @@ class StorageService {
     } catch {
       // fallback
     }
-    return [
-      {
-        id: 'msg_1',
-        senderId: 'fnd_101',
-        senderName: 'Aria_Star',
-        receiverId: 'user',
-        text: 'Hey! Ready for World 2 Enchanted Forest co-op tonight?',
-        timestamp: '10:42 AM',
-        isEncrypted: true
-      },
-      {
-        id: 'msg_2',
-        senderId: 'user',
-        senderName: 'You',
-        receiverId: 'fnd_101',
-        text: 'Definitely! I customized Maya with the adventure vest, ready to jump!',
-        timestamp: '10:44 AM',
-        isEncrypted: true
-      }
-    ];
+    return [];
   }
 
   public addChatMessage(msg: ChatMessage): void {

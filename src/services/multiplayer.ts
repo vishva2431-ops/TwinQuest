@@ -76,7 +76,7 @@ class MultiplayerService {
     // Connect to room (or simulate active partner for test room)
     const roomId = 'room_' + cleanCode;
     const isLeoHost = profile.activeCharacter === 'girl';
-    const hostName = isLeoHost ? 'Leo (Boyfriend)' : 'Maya (Girlfriend)';
+    const hostName = isLeoHost ? `${profile.boyName || 'Boyfriend'}` : `${profile.girlName || 'Girlfriend'}`;
     const hostChar: CharacterGender = isLeoHost ? 'boy' : 'girl';
 
     this.activeRoom = {
