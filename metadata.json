@@ -1,0 +1,6 @@
+{
+  "name": "TwinQuest — 3D Cooperative Adventure Platformer",
+  "description": "An original romantic 3D cooperative adventure platformer featuring Boyfriend & Girlfriend navigating unexpected surprise traps, platforming puzzles, online multiplayer rooms, and 10 fantasy worlds.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
