@@ -150,6 +150,17 @@ export const Navigation: React.FC<NavigationProps> = ({
             <Box className="w-4 h-4" />
             <span>Godot Source</span>
           </button>
+
+          {/* Quick Login / OTP Link */}
+          <button
+            onClick={() => {
+              sound.playButtonClick();
+              onOpenAuth();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-white hover:bg-rose-500/10 transition-colors"
+          >
+            <span>{profile.isEmailVerified ? 'Account' : 'Login / OTP'}</span>
+          </button>
         </nav>
 
         {/* Right Action Cluster */}
@@ -160,25 +171,39 @@ export const Navigation: React.FC<NavigationProps> = ({
               sound.playButtonClick();
               onOpenCustomization();
             }}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700/80 text-xs font-semibold shadow-md active:scale-95 transition-all"
-            title="Customize Characters (Boyfriend & Girlfriend)"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700/80 text-xs font-semibold shadow-md active:scale-95 transition-all"
+            title="Rename & Customize Characters"
           >
             <User className="w-3.5 h-3.5 text-rose-400" />
-            <span className="hidden sm:inline">Customize</span>
+            <span className="hidden sm:inline">Characters</span>
           </button>
 
-          {/* User Profile / Login */}
+          {/* User Profile / Login with Email OTP Indicator */}
           <button
             onClick={() => {
               sound.playButtonClick();
               onOpenAuth();
             }}
-            className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-semibold text-slate-300"
+            className={`flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-xl border text-xs font-semibold transition-all active:scale-95 ${
+              profile.isEmailVerified
+                ? 'bg-slate-900 border-emerald-500/40 text-slate-200 hover:border-emerald-500'
+                : 'bg-gradient-to-r from-rose-950/60 to-slate-900 border-rose-500/40 text-rose-200 hover:border-rose-400'
+            }`}
+            title={profile.isEmailVerified ? `Verified Email: ${profile.verifiedEmail}` : 'Click to Sign In with Email OTP'}
           >
-            <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white text-[11px] font-bold">
+            <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-white text-[11px] font-bold ${
+              profile.isEmailVerified
+                ? 'bg-gradient-to-tr from-emerald-500 to-teal-600'
+                : 'bg-gradient-to-tr from-rose-500 to-pink-600'
+            }`}>
               {profile.username[0]?.toUpperCase() || 'A'}
             </div>
-            <span className="hidden md:inline">{profile.username}</span>
+            <div className="hidden md:flex flex-col text-left leading-tight">
+              <span className="text-xs font-bold text-white truncate max-w-[100px]">{profile.username}</span>
+              <span className={`text-[9px] ${profile.isEmailVerified ? 'text-emerald-400 font-medium' : 'text-rose-300'}`}>
+                {profile.isEmailVerified ? 'Verified Account' : 'Sign In (Email OTP)'}
+              </span>
+            </div>
           </button>
 
           {/* Big Quick Play Button */}

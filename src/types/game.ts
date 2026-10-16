@@ -34,8 +34,13 @@ export interface PlayerProfile {
   unlockedWorlds: number; // 1 to 10
   currentWorldId: number;
   currentLevelIndex: number;
+  isEmailVerified: boolean;
+  verifiedEmail?: string;
+  sessionToken?: string;
   soundEnabled: boolean;
   musicEnabled: boolean;
+  voiceChatEnabled: boolean;
+  micMuted: boolean;
 }
 
 export interface WorldData {
@@ -171,6 +176,10 @@ export interface GameSettings {
   musicVolume: number; // 0 to 1
   sfxVolume: number; // 0 to 1
   ambientVolume: number; // 0 to 1
+  voiceChatEnabled: boolean;
+  micMuted: boolean;
+  micSensitivity: number; // 0 to 1
+  voiceVolume: number; // 0 to 1
   keyBindings: {
     p1Up: string;
     p1Down: string;
@@ -182,6 +191,7 @@ export interface GameSettings {
     p2Left: string;
     p2Right: string;
     p2Jump: string;
+    toggleMic: string;
     action: string;
     reset: string;
     pause: string;

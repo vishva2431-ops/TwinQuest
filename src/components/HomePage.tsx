@@ -1,8 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { Play, Users, Sparkles, Map, Layers, ShieldCheck, Heart, ArrowRight, Zap, Trophy, Compass } from 'lucide-react';
+import { Play, Users, Sparkles, Map, Layers, ShieldCheck, Heart, ArrowRight, Zap, Trophy, Compass, User, Mail, Mic, Check } from 'lucide-react';
 import { PlayerProfile, WorldData } from '../types/game';
-import { WORLDS_DATA } from '../services/storage';
+import { WORLDS_DATA, storage } from '../services/storage';
 import { createCharacterRig, CharacterRig } from '../game/characterModel';
 import { sound } from '../services/sound';
 
@@ -11,16 +11,38 @@ interface HomePageProps {
   onPlay: (worldId: number, levelNumber: number) => void;
   onSelectTab: (tab: 'home' | 'maps' | 'levels' | 'friends' | 'rooms' | 'settings' | 'deliverables') => void;
   onOpenCustomization: () => void;
+  onOpenAuth: () => void;
+  onUpdateProfile: (profile: PlayerProfile) => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
   profile,
   onPlay,
   onSelectTab,
-  onOpenCustomization
+  onOpenCustomization,
+  onOpenAuth,
+  onUpdateProfile
 }) => {
   const hero3DMountRef = useRef<HTMLDivElement>(null);
   const currentWorld = WORLDS_DATA.find((w) => w.id === profile.currentWorldId) || WORLDS_DATA[0];
+
+  const [boyNameInput, setBoyNameInput] = useState(profile.boyName || 'Boyfriend');
+  const [girlNameInput, setGirlNameInput] = useState(profile.girlName || 'Girlfriend');
+  const [namesSaved, setNamesSaved] = useState(false);
+
+  useEffect(() => {
+    setBoyNameInput(profile.boyName || 'Boyfriend');
+    setGirlNameInput(profile.girlName || 'Girlfriend');
+  }, [profile.boyName, profile.girlName]);
+
+  const handleSaveNames = (e: React.FormEvent) => {
+    e.preventDefault();
+    sound.playButtonClick();
+    const updated = storage.updateCharacterNames(boyNameInput, girlNameInput);
+    onUpdateProfile(updated);
+    setNamesSaved(true);
+    setTimeout(() => setNamesSaved(false), 2000);
+  };
 
   useEffect(() => {
     if (!hero3DMountRef.current) return;
@@ -197,6 +219,150 @@ export const HomePage: React.FC<HomePageProps> = ({
           <div className="text-[11px] text-slate-400 mt-3 flex items-center gap-1.5 font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
             <span>{profile.boyName || 'Boyfriend'} & {profile.girlName || 'Girlfriend'} • Live 3D Rig</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Direct Character Names & Roles Customizer Bar */}
+      <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-800">
+          <div>
+            <div className="flex items-center gap-2 text-rose-400 text-xs font-bold uppercase tracking-wider">
+              <User className="w-4 h-4" />
+              <span>Customize Character Names</span>
+            </div>
+            <h2 className="text-xl font-bold text-white mt-0.5">Who are the two adventurers?</h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Change the names of your Boyfriend and Girlfriend characters. Never hardcoded — personalize your story!
+            </p>
+          </div>
+
+          <button
+            onClick={() => {
+              sound.playButtonClick();
+              onOpenCustomization();
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-colors w-fit"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span>Open Full 3D Wardrobe Studio</span>
+          </button>
+        </div>
+
+        <form onSubmit={handleSaveNames} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+          <div>
+            <label className="text-xs font-bold text-blue-300 block mb-1.5 flex items-center gap-1">
+              <span>👦</span>
+              <span>Boyfriend Character Name</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={boyNameInput}
+              onChange={(e) => setBoyNameInput(e.target.value)}
+              placeholder="e.g. Leo, Romeo, Jack..."
+              className="w-full px-4 py-2.5 rounded-2xl bg-slate-800/90 border border-slate-700 text-white text-xs font-bold focus:outline-none focus:border-blue-500 shadow-inner"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-rose-300 block mb-1.5 flex items-center gap-1">
+              <span>👧</span>
+              <span>Girlfriend Character Name</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={girlNameInput}
+              onChange={(e) => setGirlNameInput(e.target.value)}
+              placeholder="e.g. Maya, Juliet, Rose..."
+              className="w-full px-4 py-2.5 rounded-2xl bg-slate-800/90 border border-slate-700 text-white text-xs font-bold focus:outline-none focus:border-rose-500 shadow-inner"
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="flex-1 py-2.5 px-5 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-xs shadow-lg shadow-rose-600/30 transition-all active:scale-95 flex items-center justify-center gap-2"
+            >
+              {namesSaved ? <Check className="w-4 h-4 text-emerald-300" /> : <Check className="w-4 h-4" />}
+              <span>{namesSaved ? 'Names Saved!' : 'Apply Character Names'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Email OTP Verification & In-Game Mic Callout Banner */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Email OTP Verification Callout */}
+        <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 shadow-xl flex flex-col justify-between">
+          <div className="flex items-start gap-4 mb-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${
+              profile.isEmailVerified
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+            }`}>
+              <Mail className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white">Email OTP Account Verification</h3>
+                {profile.isEmailVerified && (
+                  <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3" />
+                    Verified
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                {profile.isEmailVerified
+                  ? `Your account is verified with ${profile.verifiedEmail}. Persistent cloud saves and secure matchmaking are enabled.`
+                  : 'Log in with your email address, adventurer name, and password to receive a 6-digit email OTP verification code.'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              sound.playButtonClick();
+              onOpenAuth();
+            }}
+            className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 ${
+              profile.isEmailVerified
+                ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/25 active:scale-95'
+            }`}
+          >
+            <span>{profile.isEmailVerified ? 'Manage Verified Account' : 'Sign In & Get Email OTP'}</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Live In-Game Voice Mic Callout */}
+        <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/40 border border-slate-800 shadow-xl flex flex-col justify-between">
+          <div className="flex items-start gap-4 mb-4">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shadow-lg">
+              <Mic className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white">In-Game Teammate Voice Mic</h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                Speak live through your microphone with your partner to warn each other about falling floors, sudden boulders, and fake portals. Easily toggle Mic ON / OFF anytime!
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between text-xs pt-1">
+            <span className="text-slate-400">Shortcut in-game: <kbd className="px-1.5 py-0.5 bg-slate-800 rounded font-mono text-white">M</kbd></span>
+            <button
+              onClick={() => {
+                sound.playButtonClick();
+                onSelectTab('settings');
+              }}
+              className="text-xs font-bold text-emerald-400 hover:underline"
+            >
+              Configure Mic & Sensitivity →
+            </button>
           </div>
         </div>
       </div>

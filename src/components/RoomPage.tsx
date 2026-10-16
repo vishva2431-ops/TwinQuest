@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Users, Copy, Check, Play, UserCheck, LogOut, MessageCircle, Send, Sparkles, Shield, Heart } from 'lucide-react';
+import { Users, Copy, Check, Play, UserCheck, LogOut, MessageCircle, Send, Sparkles, Shield, Heart, Mic, MicOff } from 'lucide-react';
 import { multiplayer } from '../services/multiplayer';
 import { sound } from '../services/sound';
 import { RoomState, PlayerProfile } from '../types/game';
 import { WORLDS_DATA } from '../services/storage';
+import { voiceChat, VoiceChatState } from '../services/voiceChat';
 
 interface RoomPageProps {
   profile: PlayerProfile;
@@ -18,6 +19,12 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
   const [copiedCode, setCopiedCode] = useState(false);
   const [chatMessages, setChatMessages] = useState<string[]>([]);
   const [chatInput, setChatInput] = useState('');
+  const [voiceState, setVoiceState] = useState<VoiceChatState>(voiceChat.getState());
+
+  useEffect(() => {
+    const unsubVoice = voiceChat.subscribe((v) => setVoiceState(v));
+    return unsubVoice;
+  }, []);
 
   useEffect(() => {
     const unsub = multiplayer.subscribe((r) => {
@@ -156,23 +163,42 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
                 </div>
               </div>
 
-              {/* Room Code Badge */}
-              <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700 rounded-2xl px-4 py-2">
-                <span className="text-xs text-slate-400 font-mono">Code:</span>
-                <span className="text-sm font-black text-rose-400 font-mono tracking-wider">
-                  {room.roomCode}
-                </span>
+              <div className="flex items-center gap-2">
+                {/* Lobby Teammate Voice Mic Toggle */}
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(room.roomCode);
-                    setCopiedCode(true);
-                    setTimeout(() => setCopiedCode(false), 2000);
+                    sound.playButtonClick();
+                    voiceChat.toggleMic();
                   }}
-                  className="p-1 rounded-lg text-slate-400 hover:text-white"
-                  title="Copy Code"
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border text-xs font-bold transition-all shadow-md active:scale-95 ${
+                    voiceState.isMicOn
+                      ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300 ring-2 ring-emerald-500/30'
+                      : 'bg-slate-800/90 border-slate-700 text-slate-400 hover:text-white'
+                  }`}
+                  title={voiceState.isMicOn ? "Microphone LIVE (Tap to Mute)" : "Microphone MUTED (Tap to Unmute)"}
                 >
-                  {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  {voiceState.isMicOn ? <Mic className="w-4 h-4 text-emerald-400 animate-pulse" /> : <MicOff className="w-4 h-4" />}
+                  <span>{voiceState.isMicOn ? 'Mic ON' : 'Mic OFF'}</span>
                 </button>
+
+                {/* Room Code Badge */}
+                <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700 rounded-2xl px-4 py-2">
+                  <span className="text-xs text-slate-400 font-mono">Code:</span>
+                  <span className="text-sm font-black text-rose-400 font-mono tracking-wider">
+                    {room.roomCode}
+                  </span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(room.roomCode);
+                      setCopiedCode(true);
+                      setTimeout(() => setCopiedCode(false), 2000);
+                    }}
+                    className="p-1 rounded-lg text-slate-400 hover:text-white"
+                    title="Copy Code"
+                  >
+                    {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
             </div>
 

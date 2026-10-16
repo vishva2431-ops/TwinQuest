@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import confetti from 'canvas-confetti';
-import { Play, Pause, RotateCcw, Heart, Users, Sparkles, ArrowLeft, Volume2, VolumeX, ShieldAlert, CheckCircle2, ChevronRight, Smartphone } from 'lucide-react';
+import { Play, Pause, RotateCcw, Heart, Users, Sparkles, ArrowLeft, Volume2, VolumeX, ShieldAlert, CheckCircle2, ChevronRight, Smartphone, Mic, MicOff, Radio } from 'lucide-react';
 import { createTwinQuestScene, buildStaticPlatforms } from '../game/threeScene';
 import { createCharacterRig, CharacterRig } from '../game/characterModel';
 import { TrapManager } from '../game/trapSystem';
@@ -9,6 +9,7 @@ import { GameController, InputState } from '../game/gameController';
 import { generateLevel } from '../services/levelGenerator';
 import { storage, WORLDS_DATA } from '../services/storage';
 import { sound } from '../services/sound';
+import { voiceChat, VoiceChatState } from '../services/voiceChat';
 import { CharacterGender, GameSettings, LevelProgress, WorldData } from '../types/game';
 
 interface GameCanvasProps {
@@ -38,6 +39,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const [partnerDistance, setPartnerDistance] = useState<number>(0);
   const [soundMuted, setSoundMuted] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(true);
+  const [voiceState, setVoiceState] = useState<VoiceChatState>(voiceChat.getState());
+  const [micToast, setMicToast] = useState<string | null>(null);
+
+  const handleToggleMic = () => {
+    sound.playButtonClick();
+    voiceChat.toggleMic();
+    const willBeOn = !voiceState.isMicOn;
+    setMicToast(willBeOn ? 'Microphone is ON (Teammates can hear you)' : 'Microphone is OFF (Muted)');
+    setTimeout(() => setMicToast(null), 2500);
+  };
+
+  useEffect(() => {
+    const unsubVoice = voiceChat.subscribe((v) => setVoiceState(v));
+    return unsubVoice;
+  }, []);
 
   // Mobile virtual joystick state
   const [joystickActive, setJoystickActive] = useState(false);
@@ -110,6 +126,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // 'R' resets to checkpoint
       if (e.code === 'KeyR') {
         controller.resetToCheckpoint();
+      }
+
+      // 'M' toggles microphone
+      if (e.code === 'KeyM') {
+        handleToggleMic();
       }
 
       // 'Escape' toggles pause
@@ -366,6 +387,42 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             <span>Bond: {partnerDistance < 4 ? 'Harmonized ❤️' : `${partnerDistance}m`}</span>
           </div>
 
+          {/* Partner Speaking Indicator */}
+          {voiceState.partnerSpeaking && (
+            <div className="flex items-center gap-1.5 bg-rose-600/30 border border-rose-500/50 rounded-xl px-3 py-1.5 shadow-lg backdrop-blur-md text-xs font-bold text-rose-200 animate-pulse">
+              <Radio className="w-3.5 h-3.5 text-rose-400" />
+              <span>{activePlayer === 'boy' ? (profile.girlName || 'Girlfriend') : (profile.boyName || 'Boyfriend')} speaking...</span>
+            </div>
+          )}
+
+          {/* User Voice Mic Toggle Button */}
+          <button
+            onClick={handleToggleMic}
+            className={`px-3 py-2 rounded-xl border shadow-lg backdrop-blur-md transition-all active:scale-95 flex items-center gap-2 ${
+              voiceState.isMicOn
+                ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300 ring-2 ring-emerald-500/30'
+                : 'bg-slate-900/80 hover:bg-slate-800 text-slate-400 border-slate-700/60'
+            }`}
+            title={voiceState.isMicOn ? "Microphone LIVE (Press M to Mute)" : "Microphone MUTED (Press M to Speak)"}
+          >
+            {voiceState.isMicOn ? (
+              <Mic className={`w-4 h-4 ${voiceState.isSpeaking ? 'text-emerald-400 animate-pulse' : 'text-emerald-400'}`} />
+            ) : (
+              <MicOff className="w-4 h-4 text-slate-400" />
+            )}
+            <span className="hidden sm:inline text-xs font-bold">
+              {voiceState.isMicOn ? (voiceState.isSpeaking ? 'Live...' : 'Mic ON') : 'Mic OFF'}
+            </span>
+            {voiceState.isMicOn && (
+              <div className="w-7 h-2 bg-slate-800 rounded-full overflow-hidden hidden md:block">
+                <div
+                  className="h-full bg-emerald-400 transition-all duration-75"
+                  style={{ width: `${Math.round(voiceState.audioLevel * 100)}%` }}
+                />
+              </div>
+            )}
+          </button>
+
           <button
             onClick={toggleSound}
             className="p-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md transition-all active:scale-95"
@@ -557,7 +614,42 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               {activePlayer === 'boy' ? `${profile.girlName || 'Girl'} 👧` : `${profile.boyName || 'Boy'} 👦`}
             </button>
           </div>
+
+          {/* Quick Mic On/Off Touch Button for Mobile */}
+          <div
+            className="absolute z-30 touch-none pointer-events-auto"
+            style={{
+              left: `${settings.mobileControls.switchBtnX}%`,
+              top: `${Math.max(12, settings.mobileControls.switchBtnY - 20)}%`,
+              transform: 'translate(-50%, -50%)',
+              opacity: settings.mobileControls.opacity
+            }}
+          >
+            <button
+              onTouchStart={(e) => {
+                e.preventDefault();
+                handleToggleMic();
+              }}
+              onClick={handleToggleMic}
+              className={`w-12 h-12 rounded-full border shadow-xl flex items-center justify-center active:scale-90 transition-transform ${
+                voiceState.isMicOn
+                  ? 'bg-emerald-600 border-emerald-300 text-white shadow-emerald-500/30'
+                  : 'bg-slate-900/80 border-slate-600 text-slate-400'
+              }`}
+              title={voiceState.isMicOn ? "Mic ON (Tap to Mute)" : "Mic OFF (Tap to Unmute)"}
+            >
+              {voiceState.isMicOn ? <Mic className="w-5 h-5 text-white" /> : <MicOff className="w-5 h-5" />}
+            </button>
+          </div>
         </>
+      )}
+
+      {/* Mic Status Toast Notification */}
+      {micToast && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 border border-emerald-500/50 rounded-2xl px-5 py-2.5 shadow-2xl backdrop-blur-lg flex items-center gap-2.5 text-xs font-bold text-emerald-300 animate-bounce pointer-events-none">
+          <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+          <span>{micToast}</span>
+        </div>
       )}
 
       {/* Victory Celebration Modal */}

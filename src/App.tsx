@@ -101,6 +101,8 @@ export default function App() {
               }
             }}
             onOpenCustomization={() => setIsCustomizing(true)}
+            onOpenAuth={() => setIsAuthOpen(true)}
+            onUpdateProfile={(updated) => setProfile(updated)}
           />
         )}
 

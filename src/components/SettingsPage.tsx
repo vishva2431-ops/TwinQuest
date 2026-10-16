@@ -1,14 +1,21 @@
-import React, { useState } from 'react';
-import { Sliders, Volume2, Monitor, Keyboard, Smartphone, Globe, RotateCcw, Check, Move } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Sliders, Volume2, Monitor, Keyboard, Smartphone, Globe, RotateCcw, Check, Move, Mic, MicOff, Radio } from 'lucide-react';
 import { storage, DEFAULT_SETTINGS } from '../services/storage';
 import { GameSettings } from '../types/game';
 import { sound } from '../services/sound';
+import { voiceChat, VoiceChatState } from '../services/voiceChat';
 
 export const SettingsPage: React.FC = () => {
   const profile = storage.getProfile();
   const [settings, setSettings] = useState<GameSettings>(storage.getSettings());
   const [savedBanner, setSavedBanner] = useState(false);
   const [draggingTarget, setDraggingTarget] = useState<'joystick' | 'jump' | 'switch' | null>(null);
+  const [voiceState, setVoiceState] = useState<VoiceChatState>(voiceChat.getState());
+
+  useEffect(() => {
+    const unsub = voiceChat.subscribe((v) => setVoiceState(v));
+    return unsub;
+  }, []);
 
   const updateSetting = <K extends keyof GameSettings>(key: K, value: GameSettings[K]) => {
     const updated = { ...settings, [key]: value };
@@ -200,6 +207,80 @@ export const SettingsPage: React.FC = () => {
               step="0.05"
               value={settings.sfxVolume}
               onChange={(e) => updateSetting('sfxVolume', parseFloat(e.target.value))}
+              className="w-full accent-rose-500"
+            />
+          </div>
+        </div>
+
+        {/* Section: In-Game Teammate Voice Chat & Microphone */}
+        <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <Mic className="w-5 h-5 text-emerald-400" />
+              <span>Voice Chat & Teammate Mic</span>
+            </h2>
+            <button
+              onClick={() => {
+                sound.playButtonClick();
+                voiceChat.toggleMic();
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 ${
+                voiceState.isMicOn
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+              }`}
+            >
+              {voiceState.isMicOn ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5 text-slate-400" />}
+              <span>{voiceState.isMicOn ? 'Mic is ON (Live)' : 'Mic is OFF (Muted)'}</span>
+            </button>
+          </div>
+
+          <p className="text-xs text-slate-400">
+            Communicate live with your co-op partner during dangerous trap platforming. You can toggle your microphone ON or OFF anytime in-game using the on-screen button or by pressing <kbd className="px-1.5 py-0.5 bg-slate-800 rounded font-mono text-white">M</kbd>.
+          </p>
+
+          {/* Live Mic Test Meter */}
+          <div className="p-4 rounded-2xl bg-slate-800/40 border border-slate-700/60 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                <Radio className={`w-3.5 h-3.5 ${voiceState.isMicOn ? 'text-emerald-400 animate-pulse' : 'text-slate-500'}`} />
+                <span>Microphone Status & Live Meter</span>
+              </span>
+              <span className={`font-mono text-xs ${voiceState.isMicOn ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
+                {voiceState.statusMessage}
+              </span>
+            </div>
+
+            {/* Visual Equalizer Bar */}
+            <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-700">
+              <div
+                className={`h-full rounded-full transition-all duration-75 ${
+                  voiceState.isSpeaking ? 'bg-gradient-to-r from-emerald-500 to-teal-400' : 'bg-emerald-500/50'
+                }`}
+                style={{ width: `${Math.round(voiceState.audioLevel * 100)}%` }}
+              />
+            </div>
+
+            <div className="text-[10px] text-slate-500 flex justify-between">
+              <span>Mute</span>
+              <span>Speak into mic to test volume</span>
+              <span>100%</span>
+            </div>
+          </div>
+
+          {/* Partner Voice Volume */}
+          <div>
+            <div className="flex items-center justify-between text-xs mb-2">
+              <span className="font-bold text-slate-400">Partner Voice Incoming Volume</span>
+              <span className="font-mono text-white">{Math.round(settings.voiceVolume * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={settings.voiceVolume}
+              onChange={(e) => updateSetting('voiceVolume', parseFloat(e.target.value))}
               className="w-full accent-rose-500"
             />
           </div>

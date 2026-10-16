@@ -252,42 +252,86 @@ export const CustomizationModal: React.FC<CustomizationModalProps> = ({
           {/* Right: Customization Controls */}
           <div className="w-full md:w-7/12 p-6 space-y-6 overflow-y-auto">
             {/* Character & Player Names Section */}
-            <div className="p-4 rounded-2xl bg-slate-800/40 border border-slate-700/60 space-y-3">
-              <div className="text-xs font-bold text-rose-400 uppercase tracking-wider">
-                Character Identity
+            <div className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Custom Character Names</span>
+                </div>
+                <span className="text-[10px] text-slate-400">Zero hardcoded names</span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Boy Name Field */}
                 <div>
-                  <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                    {selectedGender === 'boy' ? 'Boyfriend Character Name' : 'Girlfriend Character Name'}
+                  <label className="text-[11px] font-bold text-blue-300 block mb-1 flex items-center gap-1">
+                    <span>👦</span>
+                    <span>Boyfriend Name</span>
                   </label>
                   <input
                     type="text"
-                    value={selectedGender === 'boy' ? boyName : girlName}
-                    onChange={(e) => {
-                      if (selectedGender === 'boy') {
-                        setBoyName(e.target.value);
-                      } else {
-                        setGirlName(e.target.value);
-                      }
-                    }}
-                    placeholder={selectedGender === 'boy' ? 'Enter boy name...' : 'Enter girl name...'}
+                    value={boyName}
+                    onChange={(e) => setBoyName(e.target.value)}
+                    placeholder="e.g. Leo, Romeo, Jack..."
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Girl Name Field */}
+                <div>
+                  <label className="text-[11px] font-bold text-rose-300 block mb-1 flex items-center gap-1">
+                    <span>👧</span>
+                    <span>Girlfriend Name</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={girlName}
+                    onChange={(e) => setGirlName(e.target.value)}
+                    placeholder="e.g. Maya, Juliet, Rose..."
                     className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:outline-none focus:border-rose-500"
                   />
                 </div>
 
+                {/* Player Profile / Account Name */}
                 <div>
-                  <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                    Player Profile Name
+                  <label className="text-[11px] font-bold text-slate-300 block mb-1 flex items-center gap-1">
+                    <span>🎮</span>
+                    <span>Account / Gamer Tag</span>
                   </label>
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="Enter player name..."
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:outline-none focus:border-rose-500"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:outline-none focus:border-emerald-500"
                   />
                 </div>
+              </div>
+
+              {/* Quick Preset Ideas */}
+              <div className="pt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+                <span className="text-slate-400">Quick ideas:</span>
+                {[
+                  ['Romeo', 'Juliet'],
+                  ['Jack', 'Rose'],
+                  ['Alex', 'Sam'],
+                  ['Ethan', 'Emma'],
+                  ['Leo', 'Maya'],
+                  ['Boyfriend', 'Girlfriend']
+                ].map(([b, g]) => (
+                  <button
+                    key={`${b}-${g}`}
+                    type="button"
+                    onClick={() => {
+                      sound.playButtonClick();
+                      setBoyName(b);
+                      setGirlName(g);
+                    }}
+                    className="px-2 py-0.5 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-slate-200 border border-slate-600/60 transition-colors"
+                  >
+                    {b} & {g}
+                  </button>
+                ))}
               </div>
             </div>
 

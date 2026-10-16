@@ -217,6 +217,10 @@ export const DEFAULT_SETTINGS: GameSettings = {
   musicVolume: 0.5,
   sfxVolume: 0.85,
   ambientVolume: 0.6,
+  voiceChatEnabled: true,
+  micMuted: false,
+  micSensitivity: 0.8,
+  voiceVolume: 0.9,
   keyBindings: {
     p1Up: 'KeyW',
     p1Down: 'KeyS',
@@ -228,6 +232,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
     p2Left: 'ArrowLeft',
     p2Right: 'ArrowRight',
     p2Jump: 'ShiftRight',
+    toggleMic: 'KeyM',
     action: 'KeyE',
     reset: 'KeyR',
     pause: 'Escape'
@@ -251,8 +256,8 @@ const INITIAL_PROFILE: PlayerProfile = {
   username: 'Adventurer',
   email: '',
   isGuest: true,
-  boyName: 'Leo',
-  girlName: 'Maya',
+  boyName: 'Boyfriend',
+  girlName: 'Girlfriend',
   activeCharacter: 'boy',
   boyCustomization: DEFAULT_BOY_CUSTOM,
   girlCustomization: DEFAULT_GIRL_CUSTOM,
@@ -263,8 +268,13 @@ const INITIAL_PROFILE: PlayerProfile = {
   unlockedWorlds: 1,
   currentWorldId: 1,
   currentLevelIndex: 1,
+  isEmailVerified: false,
+  verifiedEmail: undefined,
+  sessionToken: undefined,
   soundEnabled: true,
-  musicEnabled: true
+  musicEnabled: true,
+  voiceChatEnabled: true,
+  micMuted: false
 };
 
 const INITIAL_FRIENDS: FriendItem[] = [];
@@ -285,7 +295,10 @@ class StorageService {
           ...INITIAL_PROFILE,
           ...parsed,
           boyName: parsed.boyName || 'Boyfriend',
-          girlName: parsed.girlName || 'Girlfriend'
+          girlName: parsed.girlName || 'Girlfriend',
+          isEmailVerified: !!parsed.isEmailVerified,
+          voiceChatEnabled: parsed.voiceChatEnabled ?? true,
+          micMuted: parsed.micMuted ?? false
         };
       }
     } catch {
@@ -300,6 +313,17 @@ class StorageService {
     } catch {
       // ignore
     }
+  }
+
+  public updateCharacterNames(boyName: string, girlName: string): PlayerProfile {
+    const current = this.getProfile();
+    const updated: PlayerProfile = {
+      ...current,
+      boyName: boyName.trim() || 'Boyfriend',
+      girlName: girlName.trim() || 'Girlfriend'
+    };
+    this.saveProfile(updated);
+    return updated;
   }
 
   public getSettings(): GameSettings {
