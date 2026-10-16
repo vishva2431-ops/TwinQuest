@@ -166,9 +166,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
               <div className="flex items-center gap-2">
                 {/* Lobby Teammate Voice Mic Toggle */}
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     sound.playButtonClick();
-                    voiceChat.toggleMic();
+                    await voiceChat.toggleMic();
                   }}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border text-xs font-bold transition-all shadow-md active:scale-95 ${
                     voiceState.isMicOn

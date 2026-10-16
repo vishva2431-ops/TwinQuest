@@ -10,12 +10,14 @@ import { GameCanvas } from './components/GameCanvas';
 import { CustomizationModal } from './components/CustomizationModal';
 import { AuthModal } from './components/AuthModal';
 import { DeliverablesModal } from './components/DeliverablesModal';
+import { LoginPage } from './components/LoginPage';
 import { storage } from './services/storage';
 import { sound } from './services/sound';
 import { PlayerProfile } from './types/game';
 
 export default function App() {
   const [profile, setProfile] = useState<PlayerProfile>(storage.getProfile());
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [currentTab, setCurrentTab] = useState<'home' | 'maps' | 'levels' | 'friends' | 'rooms' | 'settings' | 'deliverables'>('home');
 
   // Game Play State
@@ -58,6 +60,20 @@ export default function App() {
     setCurrentTab('maps');
   };
 
+  // Dedicated Separate Login Page is the FIRST PAGE when opening the website or APK
+  if (!isAuthenticated) {
+    return (
+      <LoginPage
+        initialProfile={profile}
+        onLoginSuccess={(updatedProfile) => {
+          setProfile(updatedProfile);
+          setIsAuthenticated(true);
+          setCurrentTab('home');
+        }}
+      />
+    );
+  }
+
   if (isPlayingGame) {
     return (
       <GameCanvas
@@ -84,6 +100,7 @@ export default function App() {
         onOpenCustomization={() => setIsCustomizing(true)}
         onOpenAuth={() => setIsAuthOpen(true)}
         onQuickPlay={() => handleStartGame(profile.currentWorldId, profile.currentLevelIndex)}
+        onLogout={() => setIsAuthenticated(false)}
         profile={profile}
       />
 
@@ -143,7 +160,9 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'settings' && <SettingsPage />}
+        {currentTab === 'settings' && (
+          <SettingsPage onLogout={() => setIsAuthenticated(false)} />
+        )}
       </main>
 
       {/* Modals */}

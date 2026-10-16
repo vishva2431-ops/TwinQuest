@@ -428,6 +428,62 @@ class SoundEngine {
   public setMood(mood: string) {
     this.currentMood = mood;
   }
+
+  // --- Walkie-Talkie & Microphone SFX ---
+
+  public playMicOn() {
+    this.initCtx();
+    if (!this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+
+    // Dual-tone radio chirp (walkie-talkie open)
+    const osc1 = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(880, now);
+    osc1.frequency.setValueAtTime(1760, now + 0.05);
+
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(1320, now);
+    osc2.frequency.setValueAtTime(2200, now + 0.05);
+
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + 0.15);
+    osc2.stop(now + 0.15);
+  }
+
+  public playMicOff() {
+    this.initCtx();
+    if (!this.ctx || !this.sfxGain) return;
+    const now = this.ctx.currentTime;
+
+    // Soft squelch close tone
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1200, now);
+    osc.frequency.exponentialRampToValueAtTime(350, now + 0.1);
+
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+    osc.connect(gain);
+    gain.connect(this.sfxGain);
+
+    osc.start(now);
+    osc.stop(now + 0.1);
+  }
 }
 
 export const sound = new SoundEngine();

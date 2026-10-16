@@ -42,11 +42,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const [voiceState, setVoiceState] = useState<VoiceChatState>(voiceChat.getState());
   const [micToast, setMicToast] = useState<string | null>(null);
 
-  const handleToggleMic = () => {
+  const handleToggleMic = async () => {
     sound.playButtonClick();
-    voiceChat.toggleMic();
-    const willBeOn = !voiceState.isMicOn;
-    setMicToast(willBeOn ? 'Microphone is ON (Teammates can hear you)' : 'Microphone is OFF (Muted)');
+    const isNowOn = await voiceChat.toggleMic();
+    setMicToast(isNowOn ? 'Microphone is ON (Teammates can hear you)' : 'Microphone is OFF (Muted)');
     setTimeout(() => setMicToast(null), 2500);
   };
 

@@ -9,6 +9,7 @@ interface NavigationProps {
   onOpenCustomization: () => void;
   onOpenAuth: () => void;
   onQuickPlay: () => void;
+  onLogout?: () => void;
   profile: PlayerProfile;
 }
 
@@ -18,6 +19,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenCustomization,
   onOpenAuth,
   onQuickPlay,
+  onLogout,
   profile
 }) => {
   return (
@@ -151,16 +153,18 @@ export const Navigation: React.FC<NavigationProps> = ({
             <span>Godot Source</span>
           </button>
 
-          {/* Quick Login / OTP Link */}
-          <button
-            onClick={() => {
-              sound.playButtonClick();
-              onOpenAuth();
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-white hover:bg-rose-500/10 transition-colors"
-          >
-            <span>{profile.isEmailVerified ? 'Account' : 'Login / OTP'}</span>
-          </button>
+          {/* Quick Login / Switch Account Link */}
+          {onLogout && (
+            <button
+              onClick={() => {
+                sound.playButtonClick();
+                onLogout();
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-white hover:bg-rose-500/10 transition-colors"
+            >
+              <span>{profile.isEmailVerified ? 'Switch Account' : 'Login Page'}</span>
+            </button>
+          )}
         </nav>
 
         {/* Right Action Cluster */}
@@ -178,7 +182,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             <span className="hidden sm:inline">Characters</span>
           </button>
 
-          {/* User Profile / Login with Email OTP Indicator */}
+          {/* User Profile / Account Indicator */}
           <button
             onClick={() => {
               sound.playButtonClick();
@@ -189,7 +193,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 ? 'bg-slate-900 border-emerald-500/40 text-slate-200 hover:border-emerald-500'
                 : 'bg-gradient-to-r from-rose-950/60 to-slate-900 border-rose-500/40 text-rose-200 hover:border-rose-400'
             }`}
-            title={profile.isEmailVerified ? `Verified Email: ${profile.verifiedEmail}` : 'Click to Sign In with Email OTP'}
+            title={profile.isEmailVerified ? `Verified Account: ${profile.verifiedEmail}` : 'Click to Sign In'}
           >
             <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-white text-[11px] font-bold ${
               profile.isEmailVerified
@@ -201,7 +205,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             <div className="hidden md:flex flex-col text-left leading-tight">
               <span className="text-xs font-bold text-white truncate max-w-[100px]">{profile.username}</span>
               <span className={`text-[9px] ${profile.isEmailVerified ? 'text-emerald-400 font-medium' : 'text-rose-300'}`}>
-                {profile.isEmailVerified ? 'Verified Account' : 'Sign In (Email OTP)'}
+                {profile.isEmailVerified ? 'Verified Account' : 'Sign In'}
               </span>
             </div>
           </button>

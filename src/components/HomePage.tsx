@@ -292,9 +292,9 @@ export const HomePage: React.FC<HomePageProps> = ({
         </form>
       </div>
 
-      {/* Email OTP Verification & In-Game Mic Callout Banner */}
+      {/* Player Account & In-Game Mic Callout Banner */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Email OTP Verification Callout */}
+        {/* Account Authentication Callout */}
         <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 shadow-xl flex flex-col justify-between">
           <div className="flex items-start gap-4 mb-4">
             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${
@@ -306,18 +306,18 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white">Email OTP Account Verification</h3>
+                <h3 className="text-base font-bold text-white">Adventurer Account</h3>
                 {profile.isEmailVerified && (
                   <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3" />
-                    Verified
+                    Active
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-400 mt-1 leading-relaxed">
                 {profile.isEmailVerified
-                  ? `Your account is verified with ${profile.verifiedEmail}. Persistent cloud saves and secure matchmaking are enabled.`
-                  : 'Log in with your email address, adventurer name, and password to receive a 6-digit email OTP verification code.'}
+                  ? `Signed in as ${profile.username} (${profile.verifiedEmail}). Persistent cloud saves and cross-play co-op rooms are active.`
+                  : 'Sign in with your User name, Email, and Password for seamless game saves and cross-device sync.'}
               </p>
             </div>
           </div>
@@ -333,7 +333,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/25 active:scale-95'
             }`}
           >
-            <span>{profile.isEmailVerified ? 'Manage Verified Account' : 'Sign In & Get Email OTP'}</span>
+            <span>{profile.isEmailVerified ? 'Manage Account' : 'Sign In / Register'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>

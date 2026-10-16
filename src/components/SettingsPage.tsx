@@ -5,7 +5,11 @@ import { GameSettings } from '../types/game';
 import { sound } from '../services/sound';
 import { voiceChat, VoiceChatState } from '../services/voiceChat';
 
-export const SettingsPage: React.FC = () => {
+interface SettingsPageProps {
+  onLogout?: () => void;
+}
+
+export const SettingsPage: React.FC<SettingsPageProps> = ({ onLogout }) => {
   const profile = storage.getProfile();
   const [settings, setSettings] = useState<GameSettings>(storage.getSettings());
   const [savedBanner, setSavedBanner] = useState(false);
@@ -220,9 +224,9 @@ export const SettingsPage: React.FC = () => {
               <span>Voice Chat & Teammate Mic</span>
             </h2>
             <button
-              onClick={() => {
+              onClick={async () => {
                 sound.playButtonClick();
-                voiceChat.toggleMic();
+                await voiceChat.toggleMic();
               }}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 ${
                 voiceState.isMicOn
@@ -384,6 +388,33 @@ export const SettingsPage: React.FC = () => {
             </div>
 
             <div className="absolute top-2 left-2 text-[10px] text-slate-500">Screen Area (Mobile Viewport)</div>
+          </div>
+        </div>
+
+        {/* Account & Session Management */}
+        <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Globe className="w-5 h-5 text-rose-400" />
+                <span>Account & Session</span>
+              </h2>
+              <div className="text-xs text-slate-400 mt-1">
+                Logged in as <span className="text-white font-semibold">{profile.username}</span> {profile.isEmailVerified ? `(${profile.verifiedEmail})` : '(Guest Session)'}
+              </div>
+            </div>
+
+            {onLogout && (
+              <button
+                onClick={() => {
+                  sound.playButtonClick();
+                  onLogout();
+                }}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-rose-600/20 text-rose-300 hover:text-rose-400 font-bold text-xs border border-slate-700 hover:border-rose-500/40 transition-all active:scale-95 flex items-center gap-2"
+              >
+                <span>Switch Account / Logout</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
