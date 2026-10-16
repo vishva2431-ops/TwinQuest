@@ -166,6 +166,34 @@ export interface RoomState {
   status: 'waiting' | 'in_game' | 'finished';
 }
 
+export type RealtimeEventType = 'room_state' | 'intent' | 'chat' | 'player_state' | 'game_event';
+
+export type GuestIntent =
+  | { type: 'join_request'; player: { id: string; username: string; character: CharacterGender } }
+  | { type: 'toggle_ready'; playerId: string }
+  | { type: 'set_character'; playerId: string; character: CharacterGender }
+  | { type: 'leave'; playerId: string };
+
+export type GameEventPayload =
+  | { type: 'start'; worldId: number; levelNumber: number }
+  | { type: 'pause'; isPaused: boolean }
+  | { type: 'checkpoint'; checkpointId: string; position: [number, number, number] }
+  | { type: 'death'; playerId: string; character: CharacterGender }
+  | { type: 'respawn'; checkpointPos: [number, number, number] }
+  | { type: 'victory'; finalTime: number }
+  | { type: 'traps_snapshot'; state: unknown };
+
+export interface PlayerNetState {
+  playerId: string;
+  character: CharacterGender;
+  position: [number, number, number];
+  velocity: [number, number, number];
+  rotationY: number;
+  isGrounded: boolean;
+  animState: string;
+  timestamp: number;
+}
+
 export interface GameSettings {
   graphicsQuality: 'low' | 'medium' | 'high';
   shadows: boolean;
