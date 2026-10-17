@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { Play, Users, Sparkles, Map, Layers, ShieldCheck, Heart, ArrowRight, Zap, Trophy, Compass, User, Mail, Mic, Check } from 'lucide-react';
+import { Play, Users, Sparkles, ShieldCheck, Heart, ArrowRight, Trophy, Mail } from 'lucide-react';
 import { PlayerProfile, WorldData } from '../types/game';
 import { WORLDS_DATA, storage } from '../services/storage';
 import { createCharacterRig, CharacterRig } from '../game/characterModel';
@@ -9,7 +9,7 @@ import { sound } from '../services/sound';
 interface HomePageProps {
   profile: PlayerProfile;
   onPlay: (worldId: number, levelNumber: number) => void;
-  onSelectTab: (tab: 'home' | 'maps' | 'levels' | 'friends' | 'rooms' | 'settings' | 'deliverables') => void;
+  onSelectTab: (tab: 'home' | 'maps' | 'levels' | 'friends' | 'rooms' | 'settings') => void;
   onOpenCustomization: () => void;
   onOpenAuth: () => void;
   onUpdateProfile: (profile: PlayerProfile) => void;
@@ -25,24 +25,6 @@ export const HomePage: React.FC<HomePageProps> = ({
 }) => {
   const hero3DMountRef = useRef<HTMLDivElement>(null);
   const currentWorld = WORLDS_DATA.find((w) => w.id === profile.currentWorldId) || WORLDS_DATA[0];
-
-  const [boyNameInput, setBoyNameInput] = useState(profile.boyName || 'Boyfriend');
-  const [girlNameInput, setGirlNameInput] = useState(profile.girlName || 'Girlfriend');
-  const [namesSaved, setNamesSaved] = useState(false);
-
-  useEffect(() => {
-    setBoyNameInput(profile.boyName || 'Boyfriend');
-    setGirlNameInput(profile.girlName || 'Girlfriend');
-  }, [profile.boyName, profile.girlName]);
-
-  const handleSaveNames = (e: React.FormEvent) => {
-    e.preventDefault();
-    sound.playButtonClick();
-    const updated = storage.updateCharacterNames(boyNameInput, girlNameInput);
-    onUpdateProfile(updated);
-    setNamesSaved(true);
-    setTimeout(() => setNamesSaved(false), 2000);
-  };
 
   useEffect(() => {
     if (!hero3DMountRef.current) return;
@@ -162,7 +144,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         <div className="max-w-xl space-y-5 z-10 text-center lg:text-left">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-semibold">
             <Heart className="w-4 h-4 fill-rose-400 text-rose-400" />
-            <span>Romantic Cooperative Adventure • 5,000 Stages</span>
+            <span>Cooperative 3D Adventure</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white font-serif tracking-tight leading-tight">
@@ -170,7 +152,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           </h1>
 
           <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
-            Take control of <strong className="text-blue-400">{profile.boyName || 'Boyfriend'}</strong> and <strong className="text-rose-400">{profile.girlName || 'Girlfriend'}</strong> in a breathtaking 3D adventure inspired by the surprise traps of <em>Level Devil</em>. Trust each other, survive unexpected hazards, and reach the heart portal together!
+            Guide <strong className="text-blue-400">{profile.boyName || 'Boyfriend'}</strong> and <strong className="text-rose-400">{profile.girlName || 'Girlfriend'}</strong> through surprise-filled worlds, and reach the heart portal together.
           </p>
 
           {/* Quick Play CTAs */}
@@ -216,112 +198,37 @@ export const HomePage: React.FC<HomePageProps> = ({
             ref={hero3DMountRef}
             className="w-full h-80 sm:h-96 rounded-3xl overflow-hidden relative cursor-grab active:cursor-grabbing border border-slate-800/90 shadow-2xl bg-slate-950/60"
           />
-          <div className="text-[11px] text-slate-400 mt-3 flex items-center gap-1.5 font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span>{profile.boyName || 'Boyfriend'} & {profile.girlName || 'Girlfriend'} • Live 3D Rig</span>
-          </div>
         </div>
       </div>
 
-      {/* Direct Character Names & Roles Customizer Bar */}
-      <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-800">
-          <div>
-            <div className="flex items-center gap-2 text-rose-400 text-xs font-bold uppercase tracking-wider">
-              <User className="w-4 h-4" />
-              <span>Customize Character Names</span>
-            </div>
-            <h2 className="text-xl font-bold text-white mt-0.5">Who are the two adventurers?</h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Change the names of your Boyfriend and Girlfriend characters. Never hardcoded — personalize your story!
-            </p>
-          </div>
-
-          <button
-            onClick={() => {
-              sound.playButtonClick();
-              onOpenCustomization();
-            }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-colors w-fit"
-          >
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            <span>Open Full 3D Wardrobe Studio</span>
-          </button>
-        </div>
-
-        <form onSubmit={handleSaveNames} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-          <div>
-            <label className="text-xs font-bold text-blue-300 block mb-1.5 flex items-center gap-1">
-              <span>👦</span>
-              <span>Boyfriend Character Name</span>
-            </label>
-            <input
-              type="text"
-              required
-              value={boyNameInput}
-              onChange={(e) => setBoyNameInput(e.target.value)}
-              placeholder="e.g. Leo, Romeo, Jack..."
-              className="w-full px-4 py-2.5 rounded-2xl bg-slate-800/90 border border-slate-700 text-white text-xs font-bold focus:outline-none focus:border-blue-500 shadow-inner"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-bold text-rose-300 block mb-1.5 flex items-center gap-1">
-              <span>👧</span>
-              <span>Girlfriend Character Name</span>
-            </label>
-            <input
-              type="text"
-              required
-              value={girlNameInput}
-              onChange={(e) => setGirlNameInput(e.target.value)}
-              placeholder="e.g. Maya, Juliet, Rose..."
-              className="w-full px-4 py-2.5 rounded-2xl bg-slate-800/90 border border-slate-700 text-white text-xs font-bold focus:outline-none focus:border-rose-500 shadow-inner"
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="flex-1 py-2.5 px-5 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-xs shadow-lg shadow-rose-600/30 transition-all active:scale-95 flex items-center justify-center gap-2"
-            >
-              {namesSaved ? <Check className="w-4 h-4 text-emerald-300" /> : <Check className="w-4 h-4" />}
-              <span>{namesSaved ? 'Names Saved!' : 'Apply Character Names'}</span>
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Player Account & In-Game Mic Callout Banner */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Account Authentication Callout */}
-        <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 shadow-xl flex flex-col justify-between">
-          <div className="flex items-start gap-4 mb-4">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${
+      {/* Account + progress */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="md:col-span-1 p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl flex flex-col justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
               profile.isEmailVerified
                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                 : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
             }`}>
               <Mail className="w-6 h-6" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white">Adventurer Account</h3>
+                <h3 className="text-base font-bold text-white">Account</h3>
                 {profile.isEmailVerified && (
                   <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3" />
-                    Active
+                    Signed in
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              <p className="text-xs text-slate-400 mt-1 break-words">
                 {profile.isEmailVerified
-                  ? `Signed in as ${profile.username} (${profile.verifiedEmail}). Persistent cloud saves and cross-play co-op rooms are active.`
-                  : 'Sign in with your User name, Email, and Password for seamless game saves and cross-device sync.'}
+                  ? `${profile.username} (${profile.verifiedEmail})`
+                  : 'Playing as guest. Sign in to save your progress.'}
               </p>
             </div>
           </div>
-
           <button
             onClick={() => {
               sound.playButtonClick();
@@ -338,37 +245,6 @@ export const HomePage: React.FC<HomePageProps> = ({
           </button>
         </div>
 
-        {/* Live In-Game Voice Mic Callout */}
-        <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/40 border border-slate-800 shadow-xl flex flex-col justify-between">
-          <div className="flex items-start gap-4 mb-4">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shadow-lg">
-              <Mic className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-white">In-Game Teammate Voice Mic</h3>
-              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                Speak live through your microphone with your partner to warn each other about falling floors, sudden boulders, and fake portals. Easily toggle Mic ON / OFF anytime!
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between text-xs pt-1">
-            <span className="text-slate-400">Shortcut in-game: <kbd className="px-1.5 py-0.5 bg-slate-800 rounded font-mono text-white">M</kbd></span>
-            <button
-              onClick={() => {
-                sound.playButtonClick();
-                onSelectTab('settings');
-              }}
-              className="text-xs font-bold text-emerald-400 hover:underline"
-            >
-              Configure Mic & Sensitivity →
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800/80 flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
             <Heart className="w-6 h-6 fill-rose-500/40" />
@@ -386,78 +262,6 @@ export const HomePage: React.FC<HomePageProps> = ({
           <div>
             <div className="text-2xl font-black text-white font-mono">{profile.unlockedWorlds} / 10</div>
             <div className="text-xs text-slate-400">Worlds Unlocked</div>
-          </div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800/80 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-            <Layers className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="text-2xl font-black text-white font-mono">5,000</div>
-            <div className="text-xs text-slate-400">Total Stages Available</div>
-          </div>
-        </div>
-
-        <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800/80 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-            <Zap className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="text-2xl font-black text-white font-mono">100%</div>
-            <div className="text-xs text-slate-400">Surprise Trap Readiness</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Feature Highlights Grid */}
-      <div>
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-black text-white font-serif">ADVENTURE MECHANICS</h2>
-            <p className="text-xs text-slate-400">Engineered for unexpected laughs, precise jumps, and true teamwork.</p>
-          </div>
-          <button
-            onClick={() => {
-              sound.playButtonClick();
-              onSelectTab('maps');
-            }}
-            className="text-xs font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1"
-          >
-            <span>Explore All Worlds</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center text-2xl font-bold">
-              💥
-            </div>
-            <h3 className="text-base font-bold text-white">Level Devil Surprise Traps</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Floors that suddenly collapse, hidden spikes shooting from tiles, decoy portals that teleport away, and swinging bladed pendulums.
-            </p>
-          </div>
-
-          <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-2xl font-bold">
-              🤝
-            </div>
-            <h3 className="text-base font-bold text-white">Co-Op Bond Physics</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Both partners must reach the portal! Coordinate dual pressure plates, timed levers, and stay tethered with romantic heart bonds.
-            </p>
-          </div>
-
-          <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl font-bold">
-              📱
-            </div>
-            <h3 className="text-base font-bold text-white">PC & Mobile Draggable Controls</h3>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Full keyboard support (WASD + Arrows) plus customizable on-screen touch joysticks you can drag anywhere in Settings.
-            </p>
           </div>
         </div>
       </div>

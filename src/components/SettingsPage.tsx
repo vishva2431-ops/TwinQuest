@@ -412,7 +412,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onLogout }) => {
                 }}
                 className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-rose-600/20 text-rose-300 hover:text-rose-400 font-bold text-xs border border-slate-700 hover:border-rose-500/40 transition-all active:scale-95 flex items-center gap-2"
               >
-                <span>Switch Account / Logout</span>
+                <span>{profile.isEmailVerified ? 'Sign out' : 'Sign in'}</span>
               </button>
             )}
           </div>

@@ -179,9 +179,9 @@ export type GameEventPayload =
   | { type: 'pause'; isPaused: boolean }
   | { type: 'checkpoint'; checkpointId: string; position: [number, number, number] }
   | { type: 'death'; playerId: string; character: CharacterGender }
-  | { type: 'respawn'; checkpointPos: [number, number, number] }
+  | { type: 'respawn'; boyPos: [number, number, number]; girlPos: [number, number, number] }
   | { type: 'victory'; finalTime: number }
-  | { type: 'traps_snapshot'; state: unknown };
+  | { type: 'traps_snapshot'; gameTime: number };
 
 export interface PlayerNetState {
   playerId: string;

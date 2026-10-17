@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CharacterRig, CharacterAnimationState } from './characterModel';
-import { LevelDefinition, GameSettings } from '../types/game';
+import { LevelDefinition, GameSettings, CharacterGender, GameEventPayload, PlayerNetState } from '../types/game';
 import { TrapManager } from './trapSystem';
 import { sound } from '../services/sound';
 
@@ -41,6 +41,21 @@ export class GameController {
 
   public activeControlMode: 'single_switch' | 'local_coop' | 'online_room' = 'single_switch';
   public singleActivePlayer: 'boy' | 'girl' = 'boy';
+
+  // --- Online co-op ---
+  /** Character this client controls when activeControlMode === 'online_room' */
+  public localCharacter: CharacterGender | null = null;
+  /** Guest clients never decide deaths/victory; they follow the host's game events */
+  public isOnlineGuest: boolean = false;
+  /** Host emits authoritative events (death/respawn/victory) through this hook */
+  public onGameEvent: ((event: GameEventPayload) => void) | null = null;
+  private remoteTargets: Partial<Record<CharacterGender, {
+    position: THREE.Vector3;
+    velocity: THREE.Vector3;
+    rotationY: number;
+    isGrounded: boolean;
+    timestamp: number;
+  }>> = {};
 
   public gameTime: number = 0;
   public levelTimer: number = 0;
@@ -119,6 +134,93 @@ export class GameController {
     this.girlRig.group.position.copy(gSpawn);
   }
 
+  /** Apply a network snapshot for the remote character (ignored if stale or for our own character). */
+  public applyRemoteState(net: PlayerNetState) {
+    if (this.activeControlMode !== 'online_room') return;
+    if (net.character === this.localCharacter) return;
+    const prev = this.remoteTargets[net.character];
+    if (prev && net.timestamp < prev.timestamp) return; // out-of-order packet
+    this.remoteTargets[net.character] = {
+      position: new THREE.Vector3(...net.position),
+      velocity: new THREE.Vector3(...net.velocity),
+      rotationY: net.rotationY,
+      isGrounded: net.isGrounded,
+      timestamp: net.timestamp
+    };
+  }
+
+  /** Snapshot of the local character, to be broadcast to the partner. */
+  public getLocalNetState(playerId: string): PlayerNetState | null {
+    if (!this.localCharacter) return null;
+    const st = this.localCharacter === 'boy' ? this.boyState : this.girlState;
+    return {
+      playerId,
+      character: this.localCharacter,
+      position: [st.position.x, st.position.y, st.position.z],
+      velocity: [st.velocity.x, st.velocity.y, st.velocity.z],
+      rotationY: st.rotationY,
+      isGrounded: st.isGrounded,
+      animState: st.isDead ? 'dead' : st.isGrounded ? 'ground' : 'air',
+      timestamp: Date.now()
+    };
+  }
+
+  /** Guest: host says both players died. */
+  public applyRemoteDeath() {
+    this.boyState.isDead = true;
+    this.girlState.isDead = true;
+    // The host owns respawning; a guest just waits for the host's 'respawn' event
+    const t = this.isOnlineGuest ? 999 : 0.8;
+    this.boyState.respawnTimer = t;
+    this.girlState.respawnTimer = t;
+    sound.playDeath();
+  }
+
+  /** Guest: host says respawn at these positions. */
+  public applyRemoteRespawn(boyPos: [number, number, number], girlPos: [number, number, number]) {
+    this.boyState.lastCheckpointPos.set(...boyPos);
+    this.girlState.lastCheckpointPos.set(...girlPos);
+    this.resetToCheckpoint();
+  }
+
+  /** Guest: host says the level is cleared. */
+  public applyRemoteVictory(finalTime: number) {
+    if (this.isVictory) return;
+    this.isVictory = true;
+    this.levelTimer = finalTime;
+    sound.playVictory();
+  }
+
+  /** Guest: keep trap/moving-platform clock in step with the host. */
+  public syncGameTime(hostTime: number) {
+    if (Math.abs(this.gameTime - hostTime) > 0.1) this.gameTime = hostTime;
+  }
+
+  private isRemoteCharacter(c: CharacterGender): boolean {
+    return this.activeControlMode === 'online_room' && this.localCharacter !== null && c !== this.localCharacter;
+  }
+
+  private updateRemotePlayer(c: CharacterGender, state: PlayerPhysicsState, rig: CharacterRig, dt: number) {
+    const target = this.remoteTargets[c];
+    if (!target || state.isDead) return;
+    const dist = state.position.distanceTo(target.position);
+    if (dist > 6) {
+      state.position.copy(target.position);
+    } else {
+      // Dead-reckon the target forward a little, then ease toward it
+      const k = 1 - Math.exp(-14 * dt);
+      state.position.lerp(target.position, k);
+    }
+    target.position.addScaledVector(target.velocity, dt * 0.5);
+    state.velocity.copy(target.velocity);
+    state.isGrounded = target.isGrounded;
+    let dAng = target.rotationY - state.rotationY;
+    dAng = Math.atan2(Math.sin(dAng), Math.cos(dAng));
+    state.rotationY += dAng * (1 - Math.exp(-16 * dt));
+    rig.group.rotation.y = state.rotationY;
+    rig.group.position.copy(state.position);
+  }
+
   public resetToCheckpoint() {
     this.boyState.position.copy(this.boyState.lastCheckpointPos);
     this.boyState.velocity.set(0, 0, 0);
@@ -170,8 +272,8 @@ export class GameController {
         bJump = input.p1Jump;
       }
     } else {
-      // online mode - player controls active character
-      if (this.boyRig.gender === 'boy') {
+      // online mode - this client controls only its own character
+      if (this.localCharacter === 'boy') {
         if (input.p1Forward) bMoveZ -= 1;
         if (input.p1Backward) bMoveZ += 1;
         if (input.p1Left) bMoveX -= 1;
@@ -200,7 +302,7 @@ export class GameController {
         gJump = input.p1Jump;
       }
     } else {
-      if (this.girlRig.gender === 'girl') {
+      if (this.localCharacter === 'girl') {
         if (input.p1Forward) gMoveZ -= 1;
         if (input.p1Backward) gMoveZ += 1;
         if (input.p1Left) gMoveX -= 1;
@@ -210,12 +312,21 @@ export class GameController {
     }
 
     // Update Physics for both players
-    this.updatePlayerPhysics(this.boyState, this.boyRig, bMoveX, bMoveZ, bJump, dt);
-    this.updatePlayerPhysics(this.girlState, this.girlRig, gMoveX, gMoveZ, gJump, dt);
+    if (this.isRemoteCharacter('boy')) {
+      this.updateRemotePlayer('boy', this.boyState, this.boyRig, dt);
+    } else {
+      this.updatePlayerPhysics(this.boyState, this.boyRig, bMoveX, bMoveZ, bJump, dt);
+    }
+    if (this.isRemoteCharacter('girl')) {
+      this.updateRemotePlayer('girl', this.girlState, this.girlRig, dt);
+    } else {
+      this.updatePlayerPhysics(this.girlState, this.girlRig, gMoveX, gMoveZ, gJump, dt);
+    }
 
     // Update Traps & Collision
     this.trapManager.update(dt, this.gameTime, this.boyState.position, this.girlState.position, (trapType) => {
-      // Surprise Trap Hit!
+      // Surprise Trap Hit! (guests wait for the host's verdict)
+      if (this.isOnlineGuest) return;
       if (!this.boyState.isDead && !this.girlState.isDead) {
         sound.playDeath();
         this.boyState.isDead = true;
@@ -223,11 +334,26 @@ export class GameController {
         this.boyState.respawnTimer = 1.0;
         this.girlState.respawnTimer = 1.0;
         deathsCount++;
+        this.emitDeath();
       }
     });
 
     // Check Fall Death into Void
-    if (this.boyState.position.y < -15 || this.girlState.position.y < -15) {
+    // Guests only report their OWN fall (the host sees the rest through the host-side check below)
+    const guestOwnFall =
+      this.isOnlineGuest &&
+      this.localCharacter !== null &&
+      (this.localCharacter === 'boy' ? this.boyState : this.girlState).position.y < -15;
+    if (guestOwnFall && !this.boyState.isDead && !this.girlState.isDead) {
+      sound.playDeath();
+      this.boyState.isDead = true;
+      this.girlState.isDead = true;
+      this.boyState.respawnTimer = 999;
+      this.girlState.respawnTimer = 999;
+      deathsCount++;
+      this.emitDeath();
+    }
+    if (!this.isOnlineGuest && (this.boyState.position.y < -15 || this.girlState.position.y < -15)) {
       if (!this.boyState.isDead && !this.girlState.isDead) {
         sound.playDeath();
         this.boyState.isDead = true;
@@ -235,25 +361,33 @@ export class GameController {
         this.boyState.respawnTimer = 0.8;
         this.girlState.respawnTimer = 0.8;
         deathsCount++;
+        this.emitDeath();
       }
     }
 
     // Handle Respawn after Death
-    if (this.boyState.isDead) {
+    if (this.boyState.isDead && !this.isOnlineGuest) {
       this.boyState.respawnTimer -= dt;
       if (this.boyState.respawnTimer <= 0) {
         this.resetToCheckpoint();
+        const b = this.boyState.position;
+        const g = this.girlState.position;
+        this.onGameEvent?.({ type: 'respawn', boyPos: [b.x, b.y, b.z], girlPos: [g.x, g.y, g.z] });
       }
     }
 
     // Check Romantic Goal Completion (Both characters must reach the finish portal together!)
     const goalPos = new THREE.Vector3(...this.level.goalPosition);
-    const d1 = this.boyState.position.distanceTo(goalPos);
-    const d2 = this.girlState.position.distanceTo(goalPos);
+    // Horizontal distance + generous height tolerance (the portal floats above the platform)
+    const nearGoal = (p: THREE.Vector3) =>
+      Math.hypot(p.x - goalPos.x, p.z - goalPos.z) < 3.0 && Math.abs(p.y - goalPos.y) < 3.5;
 
-    if (d1 < 2.5 && d2 < 2.5 && !this.isVictory && !this.boyState.isDead) {
+    // Online: whichever client sees both partners at the portal declares victory (not only the host),
+    // so finishing doesn't depend on one particular window being active.
+    if (nearGoal(this.boyState.position) && nearGoal(this.girlState.position) && !this.isVictory && !this.boyState.isDead && !this.girlState.isDead) {
       this.isVictory = true;
       sound.playVictory();
+      this.onGameEvent?.({ type: 'victory', finalTime: this.levelTimer });
     }
 
     // Update Character Animation Kinematics
@@ -280,6 +414,10 @@ export class GameController {
     this.girlRig.updateAnimation(girlAnimState, dt);
 
     return { victory: this.isVictory, deaths: deathsCount };
+  }
+
+  private emitDeath() {
+    this.onGameEvent?.({ type: 'death', playerId: '', character: this.localCharacter ?? 'boy' });
   }
 
   private updatePlayerPhysics(

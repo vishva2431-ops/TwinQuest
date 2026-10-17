@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import confetti from 'canvas-confetti';
-import { Play, Pause, RotateCcw, Heart, Users, Sparkles, ArrowLeft, Volume2, VolumeX, ShieldAlert, CheckCircle2, ChevronRight, Smartphone, Mic, MicOff, Radio } from 'lucide-react';
+import { Wifi, WifiOff, Play, Pause, RotateCcw, Heart, Users, Sparkles, ArrowLeft, Volume2, VolumeX, ShieldAlert, CheckCircle2, ChevronRight, Smartphone, Mic, MicOff, Radio } from 'lucide-react';
 import { createTwinQuestScene, buildStaticPlatforms } from '../game/threeScene';
 import { createCharacterRig, CharacterRig } from '../game/characterModel';
 import { TrapManager } from '../game/trapSystem';
@@ -10,6 +10,7 @@ import { generateLevel } from '../services/levelGenerator';
 import { storage, WORLDS_DATA } from '../services/storage';
 import { sound } from '../services/sound';
 import { voiceChat, VoiceChatState } from '../services/voiceChat';
+import { multiplayer } from '../services/multiplayer';
 import { CharacterGender, GameSettings, LevelProgress, WorldData } from '../types/game';
 
 interface GameCanvasProps {
@@ -17,6 +18,26 @@ interface GameCanvasProps {
   levelNumber: number;
   onExitToMenu: () => void;
   onNextLevel: (worldId: number, nextLevelNumber: number) => void;
+}
+
+function makeNameTag(text: string, color: string): THREE.Sprite {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 64;
+  const g = c.getContext('2d')!;
+  g.fillStyle = 'rgba(15,23,42,0.78)';
+  g.fillRect(8, 8, 240, 48);
+  g.font = 'bold 28px sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillStyle = color;
+  g.fillText(text.length > 14 ? text.slice(0, 13) + '…' : text, 128, 34);
+  const tex = new THREE.CanvasTexture(c);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sp.scale.set(2.2, 0.55, 1);
+  sp.position.set(0, 2.5, 0);
+  sp.renderOrder = 10;
+  return sp;
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({
@@ -33,7 +54,45 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const [isPaused, setIsPaused] = useState(false);
   const [isVictory, setIsVictory] = useState(false);
   const [levelTimer, setLevelTimer] = useState(0);
-  const [controlMode, setControlMode] = useState<'single_switch' | 'local_coop'>('single_switch');
+  // Online co-op: detected once at mount from the active room (host + guest both enter via room status 'in_game')
+  const [online] = useState<{
+    isHost: boolean;
+    myChar: CharacterGender;
+    names: { boy: string; girl: string };
+  } | null>(() => {
+    const room = multiplayer.getActiveRoom();
+    if (!room || room.status !== 'in_game' || !room.player1 || !room.player2 || !multiplayer.isConnectedOnline()) {
+      return null;
+    }
+    const myId = storage.getProfile().id;
+    const isHost = room.player1.id === myId;
+    const hostChar = room.player1.character;
+    const guestChar: CharacterGender =
+      room.player2.character === hostChar ? (hostChar === 'boy' ? 'girl' : 'boy') : room.player2.character;
+    const names = { boy: '', girl: '' };
+    names[hostChar] = room.player1.username;
+    names[guestChar] = room.player2.username;
+    return { isHost, myChar: isHost ? hostChar : guestChar, names };
+  });
+
+  // Character names come from the players' user names when playing online
+  const boyLabel = online ? online.names.boy || 'Boyfriend' : storage.getProfile().boyName || 'Boyfriend';
+  const girlLabel = online ? online.names.girl || 'Girlfriend' : storage.getProfile().girlName || 'Girlfriend';
+  const victoryHandledRef = useRef(false);
+  const onNextLevelRef = useRef(onNextLevel);
+  onNextLevelRef.current = onNextLevel;
+  const [partnerGone, setPartnerGone] = useState(false);
+  // Online: both players are held at the spawn point for a short shared countdown, then GO
+  const [countdown, setCountdown] = useState<number | null>(online ? 3 : null);
+  const partnerGoneRef = useRef(false);
+  const [controlMode, setControlMode] = useState<'single_switch' | 'local_coop' | 'online_room'>(
+    online ? 'online_room' : 'single_switch'
+  );
+
+  const exitToMenu = () => {
+    if (online) multiplayer.leaveRoom();
+    onExitToMenu();
+  };
   const [activePlayer, setActivePlayer] = useState<CharacterGender>('boy');
   const [collectedHearts, setCollectedHearts] = useState<boolean[]>([false, false, false]);
   const [partnerDistance, setPartnerDistance] = useState<number>(0);
@@ -95,6 +154,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const girlRig = createCharacterRig('girl', profile.girlCustomization);
     scene.add(boyRig.group);
     scene.add(girlRig.group);
+    boyRig.group.add(makeNameTag(boyLabel, '#93c5fd'));
+    girlRig.group.add(makeNameTag(girlLabel, '#fda4af'));
     boyRigRef.current = boyRig;
     girlRigRef.current = girlRig;
 
@@ -103,6 +164,75 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     controller.activeControlMode = controlMode;
     controller.singleActivePlayer = activePlayer;
     controllerRef.current = controller;
+
+    // Always begin at the spawn point: snap the camera there (no fly-in from elsewhere)
+    {
+      const startFocus = new THREE.Vector3()
+        .addVectors(controller.boyState.position, controller.girlState.position)
+        .multiplyScalar(0.5);
+      camera.position.copy(startFocus).add(new THREE.Vector3(0, 6, 9));
+      camera.lookAt(startFocus.x, startFocus.y + 1.2, startFocus.z);
+    }
+
+    // --- Online co-op wiring ---
+    const netUnsubs: Array<() => void> = [];
+    if (online) {
+      controller.activeControlMode = 'online_room';
+      controller.localCharacter = online.myChar;
+      controller.isOnlineGuest = !online.isHost;
+      controller.isPaused = true; // held until the countdown finishes
+      // Host is authoritative for death / respawn / victory
+      controller.onGameEvent = online.isHost
+        ? (e) => multiplayer.broadcastGameEvent(e)
+        : (e) => {
+            if (e.type === 'victory' || e.type === 'death') multiplayer.broadcastGameEvent(e); // guests report finishing / their own fall
+          };
+
+      netUnsubs.push(
+        multiplayer.subscribePlayerState((net) => {
+          if (net.playerId !== profile.id) controller.applyRemoteState(net);
+        })
+      );
+
+      netUnsubs.push(
+        multiplayer.subscribeGameEvent((e) => {
+          if (online.isHost && e.type !== 'victory' && e.type !== 'death') return;
+          switch (e.type) {
+            case 'start':
+              // Host moved everyone to the next stage
+              onNextLevelRef.current(e.worldId, e.levelNumber);
+              break;
+            case 'death':
+              controller.applyRemoteDeath();
+              break;
+            case 'respawn':
+              controller.applyRemoteRespawn(e.boyPos, e.girlPos);
+              break;
+            case 'victory':
+              controller.applyRemoteVictory(e.finalTime);
+              break;
+            case 'traps_snapshot':
+              controller.syncGameTime(e.gameTime);
+              break;
+          }
+        })
+      );
+
+      // Partner left / host left => freeze and show overlay
+      netUnsubs.push(
+        multiplayer.subscribe((r) => {
+          const gone = online.isHost ? !r || !r.player2 : !r;
+          if (gone) {
+            controller.isPaused = true;
+            partnerGoneRef.current = true;
+            setPartnerGone(true);
+          }
+        })
+      );
+    }
+    let lastNetSend = 0;
+    let lastSnapshot = 0;
+    let lastHud = 0;
 
     // Start Ambient Music for World Mood
     sound.startMusic(world.musicMood);
@@ -114,7 +244,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       keysDown.add(e.code);
 
       // Tab switches active character in single-player
-      if (e.code === 'Tab') {
+      if (e.code === 'Tab' && online) {
+        e.preventDefault();
+      } else if (e.code === 'Tab') {
         e.preventDefault();
         const next: CharacterGender = controller.singleActivePlayer === 'boy' ? 'girl' : 'boy';
         controller.singleActivePlayer = next;
@@ -123,7 +255,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
 
       // 'R' resets to checkpoint
-      if (e.code === 'KeyR') {
+      if (e.code === 'KeyR' && !online) {
         controller.resetToCheckpoint();
       }
 
@@ -135,7 +267,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // 'Escape' toggles pause
       if (e.code === 'Escape') {
         setIsPaused((p) => {
-          controller.isPaused = !p;
+          // Online: the world keeps running for your partner, so only show the menu
+          if (!online) controller.isPaused = !p;
           return !p;
         });
       }
@@ -177,7 +310,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // Controller Update
       const result = controller.update(delta, input, camera);
 
-      if (result.victory && !isVictory) {
+      // Online: stream our character (~20 Hz) and, as host, the shared trap clock
+      if (online) {
+        if (currentTime - lastNetSend >= 50) {
+          lastNetSend = currentTime;
+          const net = controller.getLocalNetState(profile.id);
+          if (net) multiplayer.broadcastPlayerState(net);
+        }
+        if (online.isHost && currentTime - lastSnapshot >= 1500) {
+          lastSnapshot = currentTime;
+          multiplayer.broadcastGameEvent({ type: 'traps_snapshot', gameTime: controller.gameTime });
+        }
+      }
+
+      if (result.victory && !victoryHandledRef.current) {
+        victoryHandledRef.current = true; // run the celebration + save exactly once
         setIsVictory(true);
         confetti({
           particleCount: 120,
@@ -204,19 +351,26 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         storage.saveLevelProgress(progress);
       }
 
-      setLevelTimer(controller.levelTimer);
-
-      // Collectible Status Check
-      const heartsFound = trapManager.collectibles
-        .filter((c) => c.config.type === 'heart')
-        .map((c) => c.config.collected);
-      setCollectedHearts([heartsFound[0] || false, heartsFound[1] || false, heartsFound[2] || false]);
+      // HUD state is throttled (~8x/second) so React isn't re-rendering every frame
+      const hudNow = performance.now();
+      const hudDue = hudNow - lastHud >= 120 && !victoryHandledRef.current;
+      if (hudDue) {
+        lastHud = hudNow;
+        setLevelTimer(controller.levelTimer);
+        const heartsNow = trapManager.collectibles
+          .filter((c) => c.config.type === 'heart')
+          .map((c) => c.config.collected);
+        setCollectedHearts((prev) => {
+          const next = [heartsNow[0] || false, heartsNow[1] || false, heartsNow[2] || false];
+          return prev[0] === next[0] && prev[1] === next[1] && prev[2] === next[2] ? prev : next;
+        });
+      }
 
       // Romantic Love Tether & Distance
       const p1 = controller.boyState.position;
       const p2 = controller.girlState.position;
       const dist = p1.distanceTo(p2);
-      setPartnerDistance(Math.round(dist * 10) / 10);
+      if (hudDue) setPartnerDistance(Math.round(dist * 10) / 10);
 
       const tetherPoints = [p1.clone().add(new THREE.Vector3(0, 0.9, 0)), p2.clone().add(new THREE.Vector3(0, 0.9, 0))];
       loveTetherMesh.geometry.setFromPoints(tetherPoints);
@@ -230,7 +384,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // Smooth Follow Camera Focus
       let targetFocus = new THREE.Vector3();
-      if (controlMode === 'local_coop') {
+      if (controlMode !== 'single_switch') {
         // Midpoint between both partners
         targetFocus.addVectors(p1, p2).multiplyScalar(0.5);
       } else {
@@ -254,15 +408,33 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       cancelAnimationFrame(animId);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      netUnsubs.forEach((u) => u());
       sound.stopMusic();
       trapManager.clear();
       sceneContext.dispose();
     };
   }, [worldId, levelNumber]);
 
+  // Shared 3-2-1 countdown (online only). Everyone starts from the spawn point at GO.
+  useEffect(() => {
+    if (!online || countdown === null) return;
+    if (countdown <= 0) {
+      const c = controllerRef.current;
+      if (c && !partnerGoneRef.current) {
+        c.gameTime = 0;
+        c.levelTimer = 0;
+        c.isPaused = false;
+      }
+      const t = window.setTimeout(() => setCountdown(null), 600);
+      return () => window.clearTimeout(t);
+    }
+    const t = window.setTimeout(() => setCountdown((n) => (n === null ? null : n - 1)), 1000);
+    return () => window.clearTimeout(t);
+  }, [countdown, online]);
+
   // Sync Control Mode with Ref
   useEffect(() => {
-    if (controllerRef.current) {
+    if (controllerRef.current && !online) {
       controllerRef.current.activeControlMode = controlMode;
     }
   }, [controlMode]);
@@ -303,7 +475,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   const triggerMobileJump = () => {
     if (controllerRef.current) {
-      if (controlMode === 'single_switch') {
+      if (online) {
+        const st = online.myChar === 'boy' ? controllerRef.current.boyState : controllerRef.current.girlState;
+        st.jumpBufferTimer = 0.15;
+      } else if (controlMode === 'single_switch') {
         if (activePlayer === 'boy') {
           controllerRef.current.boyState.jumpBufferTimer = 0.15;
         } else {
@@ -340,7 +515,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           <button
             onClick={() => {
               sound.playButtonClick();
-              onExitToMenu();
+              exitToMenu();
             }}
             className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md transition-all active:scale-95 text-xs font-semibold"
           >
@@ -390,7 +565,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           {voiceState.partnerSpeaking && (
             <div className="flex items-center gap-1.5 bg-rose-600/30 border border-rose-500/50 rounded-xl px-3 py-1.5 shadow-lg backdrop-blur-md text-xs font-bold text-rose-200 animate-pulse">
               <Radio className="w-3.5 h-3.5 text-rose-400" />
-              <span>{activePlayer === 'boy' ? (profile.girlName || 'Girlfriend') : (profile.boyName || 'Boyfriend')} speaking...</span>
+              <span>{activePlayer === 'boy' ? girlLabel : boyLabel} speaking...</span>
             </div>
           )}
 
@@ -439,6 +614,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }}
             className="p-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md transition-all active:scale-95"
             title="Restart Checkpoint (R)"
+            disabled={!!online}
           >
             <RotateCcw className="w-4 h-4" />
           </button>
@@ -447,7 +623,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             onClick={() => {
               sound.playButtonClick();
               setIsPaused((p) => {
-                if (controllerRef.current) {
+                if (controllerRef.current && !online) {
                   controllerRef.current.isPaused = !p;
                 }
                 return !p;
@@ -463,7 +639,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       {/* Floating Bottom Control Bar */}
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 bg-slate-900/90 border border-slate-700/70 rounded-2xl px-5 py-2.5 shadow-2xl backdrop-blur-lg">
+        {online && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-600/20 border border-emerald-500/40 text-xs font-semibold text-emerald-300">
+            <Wifi className="w-3.5 h-3.5" />
+            <span>
+              Online Co-op · You are {online.myChar === 'boy' ? boyLabel : girlLabel}
+              {online.isHost ? ' (Host)' : ''}
+            </span>
+          </div>
+        )}
+
         {/* Switch Control Mode (Single vs Local Co-Op) */}
+        {!online && (
         <div className="flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700/50">
           <button
             onClick={() => {
@@ -494,6 +681,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             <span>2-Player Local</span>
           </button>
         </div>
+        )}
 
         {/* In Solo Mode: Character Switch Buttons */}
         {controlMode === 'single_switch' && (
@@ -509,7 +697,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                   : 'bg-slate-800/80 text-slate-400 hover:text-white'
               }`}
             >
-              <span>{profile.boyName || 'Boyfriend'}</span>
+              <span>{boyLabel}</span>
               <span className="text-[10px] opacity-75">(WASD)</span>
             </button>
 
@@ -524,7 +712,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                   : 'bg-slate-800/80 text-slate-400 hover:text-white'
               }`}
             >
-              <span>{profile.girlName || 'Girlfriend'}</span>
+              <span>{girlLabel}</span>
               <span className="text-[10px] opacity-75">(WASD)</span>
             </button>
           </div>
@@ -533,8 +721,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         {/* In Local Co-Op Mode: Key Guide */}
         {controlMode === 'local_coop' && (
           <div className="hidden md:flex items-center gap-3 text-[11px] text-slate-400 pl-2 border-l border-slate-700">
-            <div><span className="text-blue-400 font-bold">{profile.boyName || 'Boyfriend'}:</span> WASD + Space</div>
-            <div><span className="text-rose-400 font-bold">{profile.girlName || 'Girlfriend'}:</span> Arrows + RShift</div>
+            <div><span className="text-blue-400 font-bold">{boyLabel}:</span> WASD + Space</div>
+            <div><span className="text-rose-400 font-bold">{girlLabel}:</span> Arrows + RShift</div>
           </div>
         )}
       </div>
@@ -610,7 +798,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               }}
               className="w-14 h-14 rounded-full bg-slate-900/80 border border-slate-600 text-white text-[11px] font-bold shadow-lg flex items-center justify-center active:scale-90 transition-transform px-1 text-center truncate"
             >
-              {activePlayer === 'boy' ? `${profile.girlName || 'Girl'} 👧` : `${profile.boyName || 'Boy'} 👦`}
+              {activePlayer === 'boy' ? `${girlLabel} 👧` : `${boyLabel} 👦`}
             </button>
           </div>
 
@@ -663,7 +851,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               STAGE CLEAR!
             </h2>
             <p className="text-xs text-rose-200 mt-1 mb-6">
-              {profile.boyName || 'Boyfriend'} & {profile.girlName || 'Girlfriend'} completed the trial together!
+              {boyLabel} & {girlLabel} completed the trial together!
             </p>
 
             {/* Stars Rating */}
@@ -705,25 +893,71 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               <button
                 onClick={() => {
                   sound.playButtonClick();
-                  onExitToMenu();
+                  exitToMenu();
                 }}
                 className="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-sm transition-all active:scale-95 border border-slate-700"
               >
                 Level Select
               </button>
 
+              {online && !online.isHost && (
+                <div className="flex-1 py-3 rounded-xl bg-slate-800/60 border border-slate-700 text-slate-300 text-xs font-semibold flex items-center justify-center">
+                  Waiting for the host to continue…
+                </div>
+              )}
+              {(!online || online.isHost) && (
               <button
                 onClick={() => {
                   sound.playButtonClick();
-                  setIsVictory(false);
-                  onNextLevel(worldId, Math.min(500, levelNumber + 1));
+                  const nextLevel = Math.min(500, levelNumber + 1);
+                  if (online) {
+                    // Host moves both players to the next stage
+                    multiplayer.setRoomLevel(worldId, nextLevel);
+                    multiplayer.startOnlineGame();
+                  }
+                  onNextLevel(worldId, nextLevel);
                 }}
                 className="flex-1 py-3 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white font-bold text-sm shadow-lg shadow-rose-500/30 transition-all active:scale-95 flex items-center justify-center gap-1.5"
               >
                 <span>Next Stage</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
+              )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Online: shared start countdown */}
+      {online && countdown !== null && !partnerGone && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+          <div className="text-center">
+            <div className="text-8xl font-black text-white drop-shadow-[0_4px_24px_rgba(244,63,94,0.8)] font-serif">
+              {countdown > 0 ? countdown : 'GO!'}
+            </div>
+            {countdown > 0 && <div className="mt-2 text-sm font-semibold text-rose-200">Get ready at the start…</div>}
+          </div>
+        </div>
+      )}
+
+      {/* Online: partner / host disconnected */}
+      {online && partnerGone && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm bg-slate-900 border border-rose-900/60 rounded-3xl p-6 text-center shadow-2xl">
+            <WifiOff className="w-8 h-8 text-rose-400 mx-auto mb-3" />
+            <h3 className="text-xl font-bold text-white mb-2">Partner disconnected</h3>
+            <p className="text-xs text-slate-400 mb-6">
+              {online.isHost ? 'Your partner left the room.' : 'The host left the room.'} Head back and start a new room to keep playing.
+            </p>
+            <button
+              onClick={() => {
+                sound.playButtonClick();
+                exitToMenu();
+              }}
+              className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm transition-all"
+            >
+              Back to Map
+            </button>
           </div>
         </div>
       )}
@@ -747,6 +981,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 Resume Quest
               </button>
 
+              {!online && (
               <button
                 onClick={() => {
                   sound.playButtonClick();
@@ -760,12 +995,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               >
                 Restart Level
               </button>
+              )}
 
               <button
                 onClick={() => {
                   sound.playButtonClick();
                   setIsPaused(false);
-                  onExitToMenu();
+                  exitToMenu();
                 }}
                 className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-sm transition-all"
               >

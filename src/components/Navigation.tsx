@@ -138,20 +138,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             <span>Settings</span>
           </button>
 
-          <button
-            onClick={() => {
-              sound.playButtonClick();
-              onSelectTab('deliverables');
-            }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              currentTab === 'deliverables'
-                ? 'bg-amber-600 text-white shadow-md'
-                : 'text-amber-400/90 hover:text-amber-300 hover:bg-slate-800/60'
-            }`}
-          >
-            <Box className="w-4 h-4" />
-            <span>Godot Source</span>
-          </button>
+          
 
           {/* Quick Login / Switch Account Link */}
           {onLogout && (
@@ -162,7 +149,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-white hover:bg-rose-500/10 transition-colors"
             >
-              <span>{profile.isEmailVerified ? 'Switch Account' : 'Login Page'}</span>
+              <span>{profile.isEmailVerified ? 'Sign out' : 'Sign in'}</span>
             </button>
           )}
         </nav>

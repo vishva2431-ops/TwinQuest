@@ -30,7 +30,7 @@ export const MapSelectionPage: React.FC<MapSelectionPageProps> = ({
             WORLD SELECTION
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Traverse 10 romantic fantasy realms with surprise traps, cooperative platforming, and 5,000 total stages.
+            Pick a world and start your quest.
           </p>
         </div>
 

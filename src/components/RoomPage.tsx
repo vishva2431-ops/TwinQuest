@@ -335,7 +335,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
                   <span className="text-xl">{room.player1?.character === 'boy' ? '👦' : '👧'}</span>
                   <div>
                     <div className="font-bold">
-                      {room.player1?.character === 'boy' ? `Boyfriend (${profile.boyName || 'Boyfriend'})` : `Girlfriend (${profile.girlName || 'Girlfriend'})`}
+                      {room.player1?.username} ({room.player1?.character === 'boy' ? 'Boyfriend' : 'Girlfriend'})
                     </div>
                     <div className="text-[11px] text-blue-300/70">Assigned Character</div>
                   </div>
@@ -403,7 +403,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
                   <div>
                     <div className="font-bold">
                       {room.player2
-                        ? room.player2.character === 'boy' ? `Boyfriend (${profile.boyName || 'Boyfriend'})` : `Girlfriend (${profile.girlName || 'Girlfriend'})`
+                        ? `${room.player2.username} (${room.player2.character === 'boy' ? 'Boyfriend' : 'Girlfriend'})`
                         : 'Partner Slot'}
                     </div>
                     <div className="text-[11px] text-rose-300/70">

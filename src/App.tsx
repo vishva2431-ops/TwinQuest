@@ -9,15 +9,16 @@ import { SettingsPage } from './components/SettingsPage';
 import { GameCanvas } from './components/GameCanvas';
 import { CustomizationModal } from './components/CustomizationModal';
 import { AuthModal } from './components/AuthModal';
-import { DeliverablesModal } from './components/DeliverablesModal';
 import { LoginPage } from './components/LoginPage';
 import { storage } from './services/storage';
 import { sound } from './services/sound';
+import { auth } from './services/auth';
 import { PlayerProfile } from './types/game';
 
 export default function App() {
   const [profile, setProfile] = useState<PlayerProfile>(storage.getProfile());
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [checkingSession, setCheckingSession] = useState<boolean>(true);
   const [currentTab, setCurrentTab] = useState<'home' | 'maps' | 'levels' | 'friends' | 'rooms' | 'settings' | 'deliverables'>('home');
 
   // Game Play State
@@ -28,7 +29,43 @@ export default function App() {
   // Modals
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  const [isDeliverablesOpen, setIsDeliverablesOpen] = useState(false);
+
+  // Already signed in? Restore the saved session (checked with the server) instead of asking again.
+  useEffect(() => {
+    let cancelled = false;
+    auth
+      .restoreSession()
+      .then((restored) => {
+        if (cancelled) return;
+        if (restored) {
+          setProfile(restored);
+          setIsAuthenticated(true);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setCheckingSession(false);
+      });
+
+    // Session ended elsewhere (expired / signed out in another tab) -> back to the login page
+    const off = auth.onSignedOut(() => {
+      setProfile(storage.signOutProfile());
+      setIsAuthenticated(false);
+      setIsPlayingGame(false);
+    });
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    const guestProfile = await auth.signOut();
+    setProfile(guestProfile);
+    setIsAuthenticated(false);
+    setIsPlayingGame(false);
+    setCurrentTab('home');
+  };
 
   useEffect(() => {
     // Start background ambient chords on start
@@ -60,11 +97,18 @@ export default function App() {
     setCurrentTab('maps');
   };
 
-  // Dedicated Separate Login Page is the FIRST PAGE when opening the website or APK
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-sm">
+        Loading…
+      </div>
+    );
+  }
+
+  // Login page is shown until a real, verified session (or a guest session) exists
   if (!isAuthenticated) {
     return (
       <LoginPage
-        initialProfile={profile}
         onLoginSuccess={(updatedProfile) => {
           setProfile(updatedProfile);
           setIsAuthenticated(true);
@@ -77,6 +121,7 @@ export default function App() {
   if (isPlayingGame) {
     return (
       <GameCanvas
+        key={`${activeWorldId}-${activeLevelNumber}`}
         worldId={activeWorldId}
         levelNumber={activeLevelNumber}
         onExitToMenu={handleExitGame}
@@ -90,17 +135,11 @@ export default function App() {
       {/* Navigation Header */}
       <Navigation
         currentTab={currentTab}
-        onSelectTab={(tab) => {
-          if (tab === 'deliverables') {
-            setIsDeliverablesOpen(true);
-          } else {
-            setCurrentTab(tab);
-          }
-        }}
+        onSelectTab={(tab) => setCurrentTab(tab)}
         onOpenCustomization={() => setIsCustomizing(true)}
         onOpenAuth={() => setIsAuthOpen(true)}
         onQuickPlay={() => handleStartGame(profile.currentWorldId, profile.currentLevelIndex)}
-        onLogout={() => setIsAuthenticated(false)}
+        onLogout={handleLogout}
         profile={profile}
       />
 
@@ -110,13 +149,7 @@ export default function App() {
           <HomePage
             profile={profile}
             onPlay={handleStartGame}
-            onSelectTab={(tab) => {
-              if (tab === 'deliverables') {
-                setIsDeliverablesOpen(true);
-              } else {
-                setCurrentTab(tab);
-              }
-            }}
+            onSelectTab={(tab) => setCurrentTab(tab)}
             onOpenCustomization={() => setIsCustomizing(true)}
             onOpenAuth={() => setIsAuthOpen(true)}
             onUpdateProfile={(updated) => setProfile(updated)}
@@ -161,7 +194,7 @@ export default function App() {
         )}
 
         {currentTab === 'settings' && (
-          <SettingsPage onLogout={() => setIsAuthenticated(false)} />
+          <SettingsPage onLogout={handleLogout} />
         )}
       </main>
 
@@ -178,42 +211,12 @@ export default function App() {
         onClose={() => setIsAuthOpen(false)}
         profile={profile}
         onUpdateProfile={(updated) => setProfile(updated)}
-      />
-
-      <DeliverablesModal
-        isOpen={isDeliverablesOpen}
-        onClose={() => setIsDeliverablesOpen(false)}
+        onSignOut={handleLogout}
       />
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-6 px-4 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="font-serif font-bold text-slate-400">TwinQuest 3D</span>
-            <span>• Built with Three.js, React, Web Audio & Godot 4.7.2 Specs</span>
-          </div>
-
-          <div className="flex items-center gap-4 text-[11px] text-slate-400">
-            <button
-              onClick={() => setIsDeliverablesOpen(true)}
-              className="hover:text-rose-400 transition-colors"
-            >
-              Godot Deliverables
-            </button>
-            <button
-              onClick={() => setCurrentTab('settings')}
-              className="hover:text-rose-400 transition-colors"
-            >
-              Settings & Mobile Layout
-            </button>
-            <button
-              onClick={() => setIsCustomizing(true)}
-              className="hover:text-rose-400 transition-colors"
-            >
-              Costumes
-            </button>
-          </div>
-        </div>
+      <footer className="border-t border-slate-900 bg-slate-950 py-5 px-4 text-center text-xs text-slate-500">
+        <span className="font-serif font-bold text-slate-400">TwinQuest</span>
       </footer>
     </div>
   );

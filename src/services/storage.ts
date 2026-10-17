@@ -280,11 +280,80 @@ const INITIAL_PROFILE: PlayerProfile = {
 const INITIAL_FRIENDS: FriendItem[] = [];
 
 class StorageService {
-  private profileKey = 'twinquest_profile_v1';
-  private progressKey = 'twinquest_progress_v1';
+  // Saves are kept per account: a signed-in user gets their own keys, guests use the legacy ones.
+  private static ACTIVE_UID_KEY = 'twinquest_active_uid';
   private settingsKey = 'twinquest_settings_v1';
-  private friendsKey = 'twinquest_friends_v1';
-  private chatKey = 'twinquest_chat_v1';
+
+  private get suffix(): string {
+    try {
+      const uid = localStorage.getItem(StorageService.ACTIVE_UID_KEY);
+      return uid ? `_${uid}` : '';
+    } catch {
+      return '';
+    }
+  }
+  /**
+   * Each browser tab gets its own player identity for multiplayer. Without this, two tabs of the same
+   * browser share one saved profile id, both think they are the host, and ignore each other's movement.
+   */
+  private static TAB_KEY = 'twinquest_tab_id';
+  private tabId(): string {
+    try {
+      let t = sessionStorage.getItem(StorageService.TAB_KEY);
+      if (!t) {
+        t = Math.random().toString(36).slice(2, 6);
+        sessionStorage.setItem(StorageService.TAB_KEY, t);
+      }
+      return t;
+    } catch {
+      return 'x';
+    }
+  }
+  private baseId(id: string): string {
+    return (id || '').split('~')[0];
+  }
+
+  private get profileKey() { return 'twinquest_profile_v1' + this.suffix; }
+  private get progressKey() { return 'twinquest_progress_v1' + this.suffix; }
+  private get friendsKey() { return 'twinquest_friends_v1' + this.suffix; }
+  private get chatKey() { return 'twinquest_chat_v1' + this.suffix; }
+
+  /** Switch which account's saves are active. Pass null for guest. */
+  public setActiveUser(uid: string | null): void {
+    try {
+      if (uid) localStorage.setItem(StorageService.ACTIVE_UID_KEY, uid);
+      else localStorage.removeItem(StorageService.ACTIVE_UID_KEY);
+    } catch {
+      // ignore
+    }
+  }
+
+  /** Activate a verified account and return its profile (created on first sign-in). */
+  public signInProfile(user: { id: string; email: string; username: string; token?: string; gender?: 'boy' | 'girl' }): PlayerProfile {
+    this.setActiveUser(user.id);
+    const saved = this.getProfile();
+    const isFirstTime = this.baseId(saved.id) !== user.id;
+    const base: PlayerProfile = isFirstTime ? { ...INITIAL_PROFILE, id: user.id } : saved;
+    const updated: PlayerProfile = {
+      ...base,
+      id: user.id,
+      username: user.username || base.username,
+      activeCharacter: user.gender || base.activeCharacter,
+      email: user.email,
+      isGuest: false,
+      isEmailVerified: true,
+      verifiedEmail: user.email,
+      sessionToken: user.token
+    };
+    this.saveProfile(updated);
+    return this.getProfile();
+  }
+
+  /** Back to the guest profile (used on sign out). */
+  public signOutProfile(): PlayerProfile {
+    this.setActiveUser(null);
+    return this.getProfile();
+  }
 
   public getProfile(): PlayerProfile {
     try {
@@ -294,6 +363,7 @@ class StorageService {
         return {
           ...INITIAL_PROFILE,
           ...parsed,
+          id: this.baseId(parsed.id || INITIAL_PROFILE.id) + '~' + this.tabId(),
           boyName: parsed.boyName || 'Boyfriend',
           girlName: parsed.girlName || 'Girlfriend',
           isEmailVerified: !!parsed.isEmailVerified,
@@ -304,12 +374,12 @@ class StorageService {
     } catch {
       // fallback
     }
-    return INITIAL_PROFILE;
+    return { ...INITIAL_PROFILE, id: this.baseId(INITIAL_PROFILE.id) + '~' + this.tabId() };
   }
 
   public saveProfile(profile: PlayerProfile): void {
     try {
-      localStorage.setItem(this.profileKey, JSON.stringify(profile));
+      localStorage.setItem(this.profileKey, JSON.stringify({ ...profile, id: this.baseId(profile.id) }));
     } catch {
       // ignore
     }

@@ -232,7 +232,7 @@ class MultiplayerService {
                 player: {
                   id: profile.id,
                   username: profile.username,
-                  character: partnerCharacter || (profile.activeCharacter === 'boy' ? 'girl' : 'boy')
+                  character: partnerCharacter || profile.activeCharacter
                 }
               } as GuestIntent
             });
@@ -299,7 +299,7 @@ class MultiplayerService {
               player: {
                 id: profile.id,
                 username: profile.username,
-                character: partnerCharacter || (profile.activeCharacter === 'boy' ? 'girl' : 'boy')
+                character: partnerCharacter || profile.activeCharacter
               }
             } as GuestIntent
           });
@@ -318,10 +318,14 @@ class MultiplayerService {
       case 'join_request': {
         const { player } = intent;
         if (!this.activeRoom.player2) {
+          // Two players can't both be the same character: the guest gets the other one
+          const hostChar = this.activeRoom.player1?.character;
+          const guestChar: CharacterGender =
+            player.character === hostChar ? (hostChar === 'boy' ? 'girl' : 'boy') : player.character;
           this.activeRoom.player2 = {
             id: player.id,
             username: player.username,
-            character: player.character,
+            character: guestChar,
             ready: false
           };
           this.broadcastRoomState();
