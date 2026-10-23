@@ -1,4 +1,4 @@
-import { CharacterCustomization, GameSettings, LevelProgress, PlayerProfile, FriendItem, ChatMessage, WorldData, FriendSessionProgress } from '../types/game';
+import { CharacterCustomization, GameSettings, LevelProgress, PlayerProfile, FriendItem, ChatMessage, WorldData, FriendSessionProgress, CharacterGender } from '../types/game';
 
 export const WORLDS_DATA: WorldData[] = [
   {
@@ -315,6 +315,40 @@ class StorageService {
     } catch {
       // ignore
     }
+  }
+
+  public setActiveUser(_userId: string | null): void {
+    // Session context switching support
+  }
+
+  public signInProfile(info: { id: string; email: string; username: string; token?: string; gender?: CharacterGender }): PlayerProfile {
+    const current = this.getProfile();
+    const updated: PlayerProfile = {
+      ...current,
+      id: info.id || current.id,
+      email: info.email,
+      username: info.username || current.username,
+      sessionToken: info.token,
+      isGuest: false,
+      isEmailVerified: true,
+      verifiedEmail: info.email,
+      ...(info.gender ? { activeCharacter: info.gender } : {})
+    };
+    this.saveProfile(updated);
+    return updated;
+  }
+
+  public signOutProfile(): PlayerProfile {
+    const current = this.getProfile();
+    const guest: PlayerProfile = {
+      ...current,
+      isGuest: true,
+      sessionToken: undefined,
+      isEmailVerified: false,
+      verifiedEmail: undefined
+    };
+    this.saveProfile(guest);
+    return guest;
   }
 
   public updateCharacterNames(boyName: string, girlName: string): PlayerProfile {

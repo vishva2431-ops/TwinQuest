@@ -125,6 +125,7 @@ export default function App() {
   if (!isAuthenticated) {
     return (
       <LoginPage
+        initialProfile={profile}
         onLoginSuccess={(updatedProfile) => {
           setProfile(updatedProfile);
           setIsAuthenticated(true);

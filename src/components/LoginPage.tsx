@@ -20,27 +20,28 @@ import { sound } from '../services/sound';
 import { storage } from '../services/storage';
 
 interface LoginPageProps {
-  initialProfile: PlayerProfile;
+  initialProfile?: PlayerProfile;
   onLoginSuccess: (profile: PlayerProfile) => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ initialProfile, onLoginSuccess }) => {
+  const baseProfile = initialProfile || storage.getProfile();
   const [mode, setMode] = useState<'login' | 'register'>('login');
 
   // Form Fields: Username, Email, and Password
-  const [name, setName] = useState(initialProfile.username || 'Adventurer');
-  const [email, setEmail] = useState(initialProfile.email || '');
+  const [name, setName] = useState(baseProfile?.username || 'Adventurer');
+  const [email, setEmail] = useState(baseProfile?.email || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // Character / Gender Selection (Persisted to profile)
   const [selectedGender, setSelectedGender] = useState<CharacterGender>(
-    initialProfile.activeCharacter || 'boy'
+    baseProfile?.activeCharacter || 'boy'
   );
 
   // Character Custom Names (Editable right at login, no hardcoded details)
-  const [boyName, setBoyName] = useState(initialProfile.boyName || 'Boyfriend');
-  const [girlName, setGirlName] = useState(initialProfile.girlName || 'Girlfriend');
+  const [boyName, setBoyName] = useState(baseProfile?.boyName || 'Boyfriend');
+  const [girlName, setGirlName] = useState(baseProfile?.girlName || 'Girlfriend');
   const [showPartnerName, setShowPartnerName] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -69,7 +70,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ initialProfile, onLoginSuc
     // Direct Login / Registration with Username, Email, and Password (No OTP!)
     const token = 'tq_tok_' + Math.random().toString(36).substring(2) + Date.now();
     const updated: PlayerProfile = {
-      ...initialProfile,
+      ...baseProfile,
       username: name.trim(),
       email: email.trim(),
       isGuest: false,
@@ -97,7 +98,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ initialProfile, onLoginSuc
   const handleGuestLogin = () => {
     sound.playButtonClick();
     const updated: PlayerProfile = {
-      ...initialProfile,
+      ...baseProfile,
       username: name.trim() || 'Adventurer',
       activeCharacter: selectedGender,
       boyName: boyName.trim() || 'Boyfriend',
