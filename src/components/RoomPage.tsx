@@ -22,12 +22,18 @@ import { multiplayer } from '../services/multiplayer';
 import { isSupabaseConfigured } from '../services/supabaseClient';
 import { sound } from '../services/sound';
 import { RoomState, PlayerProfile, CharacterGender } from '../types/game';
-import { WORLDS_DATA } from '../services/storage';
+import { WORLDS_DATA, storage } from '../services/storage';
 import { voiceChat, VoiceChatState } from '../services/voiceChat';
 
 interface RoomPageProps {
   profile: PlayerProfile;
-  onStartGame: (worldId: number, levelNumber: number) => void;
+  onStartGame: (
+    worldId: number,
+    levelNumber: number,
+    gameMode?: 'single_player' | 'online_room' | 'local_coop',
+    friendId?: string,
+    friendName?: string
+  ) => void;
   onBackToMenu: () => void;
 }
 
@@ -73,11 +79,14 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
     const unsubGame = multiplayer.subscribeGameEvent((event) => {
       if (event.type === 'start') {
         sound.playVictory();
-        onStartGame(event.worldId, event.levelNumber);
+        const curRoom = multiplayer.getActiveRoom();
+        const isCurHost = curRoom?.hostId === profile.id;
+        const curPartner = isCurHost ? curRoom?.player2 : curRoom?.player1;
+        onStartGame(event.worldId, event.levelNumber, 'online_room', curPartner?.id, curPartner?.username);
       }
     });
     return unsubGame;
-  }, [onStartGame]);
+  }, [onStartGame, profile.id]);
 
   const handleCreateRoom = () => {
     sound.playButtonClick();
@@ -298,6 +307,44 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
               </div>
             </div>
 
+            {/* Friend Progression Tracker Banner (Requirement 4) */}
+            {(() => {
+              const partner = isHost ? room.player2 : room.player1;
+              if (!partner) return null;
+              const friendProg = storage.getFriendProgress(partner.id, room.worldId);
+              return (
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/40 via-purple-950/30 to-slate-900 border border-indigo-800/50 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+                      <span className="text-xs font-bold text-indigo-300">
+                        Saved Progress with {partner.username}
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-900/60 border border-indigo-700/60 text-indigo-200 font-mono">
+                        Stage {friendProg.levelNumber}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Independent per-friend save: your progress with {partner.username} will never overwrite other friends!
+                    </p>
+                  </div>
+
+                  {isHost && room.levelNumber !== friendProg.levelNumber && (
+                    <button
+                      onClick={() => {
+                        sound.playButtonClick();
+                        multiplayer.setRoomLevel(friendProg.worldId, friendProg.levelNumber);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md transition-all active:scale-95 flex items-center gap-1.5"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Resume Stage {friendProg.levelNumber}</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Slots Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Player 1 Slot (Host) */}
@@ -449,7 +496,8 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
                 onClick={() => {
                   sound.playButtonClick();
                   multiplayer.startOnlineGame();
-                  onStartGame(room.worldId, room.levelNumber);
+                  const partner = room.player2;
+                  onStartGame(room.worldId, room.levelNumber, 'online_room', partner?.id, partner?.username);
                 }}
                 className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-sm shadow-xl shadow-rose-600/30 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
               >

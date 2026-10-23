@@ -133,6 +133,15 @@ export interface FriendItem {
   currentRoomId?: string;
 }
 
+export interface FriendSessionProgress {
+  friendId: string;
+  friendName?: string;
+  worldId: number;
+  levelNumber: number;
+  unlockedLevel: number;
+  lastPlayedAt: string;
+}
+
 export interface ChatMessage {
   id: string;
   senderId: string;

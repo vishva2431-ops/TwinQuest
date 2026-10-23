@@ -222,6 +222,20 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ profile, onJoinRoomWit
                     </div>
                   </div>
 
+                  {/* Per-Friend Progression Badge */}
+                  {(() => {
+                    const prog = storage.getFriendProgress(friend.id, 1);
+                    return (
+                      <div className="my-2 p-2 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-300 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
+                          <span>Progress: <strong className="text-white">Stage {prog.levelNumber}</strong> (W{prog.worldId})</span>
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-mono">Max: {prog.unlockedLevel}</span>
+                      </div>
+                    );
+                  })()}
+
                   {/* Action Buttons */}
                   <div className="flex items-center gap-2 pt-3 border-t border-slate-800/60">
                     <button

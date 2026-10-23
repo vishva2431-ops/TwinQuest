@@ -25,6 +25,9 @@ export default function App() {
   const [isPlayingGame, setIsPlayingGame] = useState(false);
   const [activeWorldId, setActiveWorldId] = useState(1);
   const [activeLevelNumber, setActiveLevelNumber] = useState(1);
+  const [activeGameMode, setActiveGameMode] = useState<'single_player' | 'online_room' | 'local_coop'>('single_player');
+  const [activeFriendId, setActiveFriendId] = useState<string | undefined>(undefined);
+  const [activeFriendName, setActiveFriendName] = useState<string | undefined>(undefined);
 
   // Modals
   const [isCustomizing, setIsCustomizing] = useState(false);
@@ -72,24 +75,37 @@ export default function App() {
     sound.startMusic('sunset');
   }, []);
 
-  const handleStartGame = (worldId: number, levelNumber: number) => {
+  const handleStartGame = (
+    worldId: number,
+    levelNumber: number,
+    mode: 'single_player' | 'online_room' | 'local_coop' = 'single_player',
+    friendId?: string,
+    friendName?: string
+  ) => {
     setActiveWorldId(worldId);
     setActiveLevelNumber(levelNumber);
+    setActiveGameMode(mode);
+    setActiveFriendId(friendId);
+    setActiveFriendName(friendName);
     setIsPlayingGame(true);
 
-    // Save as current progress
-    const updated = { ...profile, currentWorldId: worldId, currentLevelIndex: levelNumber };
-    setProfile(updated);
-    storage.saveProfile(updated);
+    // Save as current progress in single player
+    if (mode === 'single_player') {
+      const updated = { ...profile, currentWorldId: worldId, currentLevelIndex: levelNumber };
+      setProfile(updated);
+      storage.saveProfile(updated);
+    }
   };
 
   const handleNextLevel = (worldId: number, nextLevelNumber: number) => {
     setActiveWorldId(worldId);
     setActiveLevelNumber(nextLevelNumber);
 
-    const updated = { ...profile, currentWorldId: worldId, currentLevelIndex: nextLevelNumber };
-    setProfile(updated);
-    storage.saveProfile(updated);
+    if (activeGameMode === 'single_player') {
+      const updated = { ...profile, currentWorldId: worldId, currentLevelIndex: nextLevelNumber };
+      setProfile(updated);
+      storage.saveProfile(updated);
+    }
   };
 
   const handleExitGame = () => {
@@ -124,6 +140,9 @@ export default function App() {
         key={`${activeWorldId}-${activeLevelNumber}`}
         worldId={activeWorldId}
         levelNumber={activeLevelNumber}
+        gameMode={activeGameMode}
+        friendId={activeFriendId}
+        friendName={activeFriendName}
         onExitToMenu={handleExitGame}
         onNextLevel={handleNextLevel}
       />
@@ -188,7 +207,7 @@ export default function App() {
         {currentTab === 'rooms' && (
           <RoomPage
             profile={profile}
-            onStartGame={(wId, lvl) => handleStartGame(wId, lvl)}
+            onStartGame={(wId, lvl, mode, fId, fName) => handleStartGame(wId, lvl, mode || 'online_room', fId, fName)}
             onBackToMenu={() => setCurrentTab('home')}
           />
         )}

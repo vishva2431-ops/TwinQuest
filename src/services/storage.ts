@@ -1,4 +1,4 @@
-import { CharacterCustomization, GameSettings, LevelProgress, PlayerProfile, FriendItem, ChatMessage, WorldData } from '../types/game';
+import { CharacterCustomization, GameSettings, LevelProgress, PlayerProfile, FriendItem, ChatMessage, WorldData, FriendSessionProgress } from '../types/game';
 
 export const WORLDS_DATA: WorldData[] = [
   {
@@ -280,80 +280,12 @@ const INITIAL_PROFILE: PlayerProfile = {
 const INITIAL_FRIENDS: FriendItem[] = [];
 
 class StorageService {
-  // Saves are kept per account: a signed-in user gets their own keys, guests use the legacy ones.
-  private static ACTIVE_UID_KEY = 'twinquest_active_uid';
+  private profileKey = 'twinquest_profile_v1';
+  private progressKey = 'twinquest_progress_v1';
   private settingsKey = 'twinquest_settings_v1';
-
-  private get suffix(): string {
-    try {
-      const uid = localStorage.getItem(StorageService.ACTIVE_UID_KEY);
-      return uid ? `_${uid}` : '';
-    } catch {
-      return '';
-    }
-  }
-  /**
-   * Each browser tab gets its own player identity for multiplayer. Without this, two tabs of the same
-   * browser share one saved profile id, both think they are the host, and ignore each other's movement.
-   */
-  private static TAB_KEY = 'twinquest_tab_id';
-  private tabId(): string {
-    try {
-      let t = sessionStorage.getItem(StorageService.TAB_KEY);
-      if (!t) {
-        t = Math.random().toString(36).slice(2, 6);
-        sessionStorage.setItem(StorageService.TAB_KEY, t);
-      }
-      return t;
-    } catch {
-      return 'x';
-    }
-  }
-  private baseId(id: string): string {
-    return (id || '').split('~')[0];
-  }
-
-  private get profileKey() { return 'twinquest_profile_v1' + this.suffix; }
-  private get progressKey() { return 'twinquest_progress_v1' + this.suffix; }
-  private get friendsKey() { return 'twinquest_friends_v1' + this.suffix; }
-  private get chatKey() { return 'twinquest_chat_v1' + this.suffix; }
-
-  /** Switch which account's saves are active. Pass null for guest. */
-  public setActiveUser(uid: string | null): void {
-    try {
-      if (uid) localStorage.setItem(StorageService.ACTIVE_UID_KEY, uid);
-      else localStorage.removeItem(StorageService.ACTIVE_UID_KEY);
-    } catch {
-      // ignore
-    }
-  }
-
-  /** Activate a verified account and return its profile (created on first sign-in). */
-  public signInProfile(user: { id: string; email: string; username: string; token?: string; gender?: 'boy' | 'girl' }): PlayerProfile {
-    this.setActiveUser(user.id);
-    const saved = this.getProfile();
-    const isFirstTime = this.baseId(saved.id) !== user.id;
-    const base: PlayerProfile = isFirstTime ? { ...INITIAL_PROFILE, id: user.id } : saved;
-    const updated: PlayerProfile = {
-      ...base,
-      id: user.id,
-      username: user.username || base.username,
-      activeCharacter: user.gender || base.activeCharacter,
-      email: user.email,
-      isGuest: false,
-      isEmailVerified: true,
-      verifiedEmail: user.email,
-      sessionToken: user.token
-    };
-    this.saveProfile(updated);
-    return this.getProfile();
-  }
-
-  /** Back to the guest profile (used on sign out). */
-  public signOutProfile(): PlayerProfile {
-    this.setActiveUser(null);
-    return this.getProfile();
-  }
+  private friendsKey = 'twinquest_friends_v1';
+  private chatKey = 'twinquest_chat_v1';
+  private friendProgressKey = 'twinquest_friend_progress_v1';
 
   public getProfile(): PlayerProfile {
     try {
@@ -363,7 +295,7 @@ class StorageService {
         return {
           ...INITIAL_PROFILE,
           ...parsed,
-          id: this.baseId(parsed.id || INITIAL_PROFILE.id) + '~' + this.tabId(),
+          activeCharacter: (parsed.activeCharacter === 'girl' ? 'girl' : 'boy'),
           boyName: parsed.boyName || 'Boyfriend',
           girlName: parsed.girlName || 'Girlfriend',
           isEmailVerified: !!parsed.isEmailVerified,
@@ -374,12 +306,12 @@ class StorageService {
     } catch {
       // fallback
     }
-    return { ...INITIAL_PROFILE, id: this.baseId(INITIAL_PROFILE.id) + '~' + this.tabId() };
+    return INITIAL_PROFILE;
   }
 
   public saveProfile(profile: PlayerProfile): void {
     try {
-      localStorage.setItem(this.profileKey, JSON.stringify({ ...profile, id: this.baseId(profile.id) }));
+      localStorage.setItem(this.profileKey, JSON.stringify(profile));
     } catch {
       // ignore
     }
@@ -547,6 +479,60 @@ class StorageService {
     all.push(msg);
     try {
       localStorage.setItem(this.chatKey, JSON.stringify(all));
+    } catch {
+      // ignore
+    }
+  }
+
+  public getAllFriendProgress(): Record<string, FriendSessionProgress> {
+    try {
+      const data = localStorage.getItem(this.friendProgressKey);
+      if (data) return JSON.parse(data);
+    } catch {
+      // fallback
+    }
+    return {};
+  }
+
+  public getFriendProgress(friendId: string, defaultWorldId: number = 1): FriendSessionProgress {
+    const all = this.getAllFriendProgress();
+    const cleanId = friendId.trim().toLowerCase();
+    if (all[cleanId]) {
+      return all[cleanId];
+    }
+    // Brand new progress record for this friend session: starts at Level 1
+    const newProgress: FriendSessionProgress = {
+      friendId: cleanId,
+      worldId: defaultWorldId,
+      levelNumber: 1,
+      unlockedLevel: 1,
+      lastPlayedAt: new Date().toISOString()
+    };
+    all[cleanId] = newProgress;
+    try {
+      localStorage.setItem(this.friendProgressKey, JSON.stringify(all));
+    } catch {
+      // ignore
+    }
+    return newProgress;
+  }
+
+  public saveFriendProgress(progress: FriendSessionProgress): void {
+    const all = this.getAllFriendProgress();
+    const cleanId = progress.friendId.trim().toLowerCase();
+    const existing = all[cleanId];
+
+    all[cleanId] = {
+      friendId: cleanId,
+      friendName: progress.friendName || existing?.friendName,
+      worldId: progress.worldId,
+      levelNumber: progress.levelNumber,
+      unlockedLevel: Math.max(progress.unlockedLevel, existing?.unlockedLevel || 1),
+      lastPlayedAt: new Date().toISOString()
+    };
+
+    try {
+      localStorage.setItem(this.friendProgressKey, JSON.stringify(all));
     } catch {
       // ignore
     }

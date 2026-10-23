@@ -38,7 +38,7 @@ export function createTwinQuestScene(container: HTMLDivElement, world: WorldData
     alpha: false
   });
   renderer.setSize(width, height);
-  renderer.setPixelRatio(isHeadless ? 1 : Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(isHeadless ? 1 : Math.min(window.devicePixelRatio, 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
@@ -54,8 +54,8 @@ export function createTwinQuestScene(container: HTMLDivElement, world: WorldData
   const sunLight = new THREE.DirectionalLight('#fff7ed', 1.8);
   sunLight.position.set(20, 35, 15);
   sunLight.castShadow = !isHeadless;
-  sunLight.shadow.mapSize.width = 2048;
-  sunLight.shadow.mapSize.height = 2048;
+  sunLight.shadow.mapSize.width = 1024;
+  sunLight.shadow.mapSize.height = 1024;
   sunLight.shadow.camera.near = 0.5;
   sunLight.shadow.camera.far = 100;
   const d = 30;

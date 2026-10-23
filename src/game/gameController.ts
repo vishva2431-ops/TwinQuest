@@ -41,6 +41,8 @@ export class GameController {
 
   public activeControlMode: 'single_switch' | 'local_coop' | 'online_room' = 'single_switch';
   public singleActivePlayer: 'boy' | 'girl' = 'boy';
+  public isSinglePlayer: boolean = false;
+  public singlePlayerCharacter: 'boy' | 'girl' = 'boy';
 
   // --- Online co-op ---
   /** Character this client controls when activeControlMode === 'online_room' */
@@ -222,6 +224,21 @@ export class GameController {
   }
 
   public resetToCheckpoint() {
+    if (this.isSinglePlayer) {
+      if (this.singlePlayerCharacter === 'boy') {
+        this.boyState.position.copy(this.boyState.lastCheckpointPos);
+        this.boyState.velocity.set(0, 0, 0);
+        this.boyState.isDead = false;
+        this.boyRig.group.position.copy(this.boyState.position);
+      } else {
+        this.girlState.position.copy(this.girlState.lastCheckpointPos);
+        this.girlState.velocity.set(0, 0, 0);
+        this.girlState.isDead = false;
+        this.girlRig.group.position.copy(this.girlState.position);
+      }
+      return;
+    }
+
     this.boyState.position.copy(this.boyState.lastCheckpointPos);
     this.boyState.velocity.set(0, 0, 0);
     this.boyState.isDead = false;
@@ -247,10 +264,88 @@ export class GameController {
     // Checkpoints update
     this.trapManager.checkpoints.forEach((cp) => {
       if (cp.config.activated) {
-        this.boyState.lastCheckpointPos.set(cp.config.position[0] - 1, cp.config.position[1] + 1, cp.config.position[2]);
-        this.girlState.lastCheckpointPos.set(cp.config.position[0] + 1, cp.config.position[1] + 1, cp.config.position[2]);
+        if (this.isSinglePlayer) {
+          if (this.singlePlayerCharacter === 'boy') {
+            this.boyState.lastCheckpointPos.set(cp.config.position[0], cp.config.position[1] + 1, cp.config.position[2]);
+          } else {
+            this.girlState.lastCheckpointPos.set(cp.config.position[0], cp.config.position[1] + 1, cp.config.position[2]);
+          }
+        } else {
+          this.boyState.lastCheckpointPos.set(cp.config.position[0] - 1, cp.config.position[1] + 1, cp.config.position[2]);
+          this.girlState.lastCheckpointPos.set(cp.config.position[0] + 1, cp.config.position[1] + 1, cp.config.position[2]);
+        }
       }
     });
+
+    // ===== SINGLE PLAYER / NORMAL GAMEPLAY MODE =====
+    if (this.isSinglePlayer) {
+      const isBoy = this.singlePlayerCharacter === 'boy';
+      const activeState = isBoy ? this.boyState : this.girlState;
+      const activeRig = isBoy ? this.boyRig : this.girlRig;
+
+      let moveX = 0;
+      let moveZ = 0;
+      if (input.p1Forward) moveZ -= 1;
+      if (input.p1Backward) moveZ += 1;
+      if (input.p1Left) moveX -= 1;
+      if (input.p1Right) moveX += 1;
+      const jump = input.p1Jump;
+
+      this.updatePlayerPhysics(activeState, activeRig, moveX, moveZ, jump, dt);
+
+      // Traps update: check only active player position
+      const dummyOffscreen = new THREE.Vector3(0, -999, 0);
+      const bPos = isBoy ? activeState.position : dummyOffscreen;
+      const gPos = isBoy ? dummyOffscreen : activeState.position;
+
+      this.trapManager.update(dt, this.gameTime, bPos, gPos, () => {
+        if (!activeState.isDead) {
+          sound.playDeath();
+          activeState.isDead = true;
+          activeState.respawnTimer = 1.0;
+          deathsCount++;
+        }
+      });
+
+      // Void Fall Death
+      if (activeState.position.y < -15) {
+        if (!activeState.isDead) {
+          sound.playDeath();
+          activeState.isDead = true;
+          activeState.respawnTimer = 0.8;
+          deathsCount++;
+        }
+      }
+
+      // Respawn
+      if (activeState.isDead) {
+        activeState.respawnTimer -= dt;
+        if (activeState.respawnTimer <= 0) {
+          this.resetToCheckpoint();
+        }
+      }
+
+      // Goal Completion in Single Player
+      const goalPos = new THREE.Vector3(...this.level.goalPosition);
+      const dist = activeState.position.distanceTo(goalPos);
+      if (dist < 2.5 && !this.isVictory && !activeState.isDead) {
+        this.isVictory = true;
+        sound.playVictory();
+      }
+
+      // Character Animation
+      const animState: CharacterAnimationState = {
+        velocity: activeState.velocity,
+        isGrounded: activeState.isGrounded,
+        isJumping: activeState.velocity.y > 0.5,
+        isFalling: activeState.velocity.y < -0.5,
+        isDead: activeState.isDead,
+        isCheering: this.isVictory
+      };
+      activeRig.updateAnimation(animState, dt);
+
+      return { victory: this.isVictory, deaths: deathsCount };
+    }
 
     // 1. Process Boy Inputs
     let bMoveX = 0;

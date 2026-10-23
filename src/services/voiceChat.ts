@@ -2,12 +2,15 @@
  * Voice Chat & Microphone Manager for TwinQuest
  * Enables real-time microphone audio capture, volume metering,
  * and teammate voice communication with user toggleable ON/OFF states.
- * Includes automatic virtual channel fallback if browser/iframe blocks audio hardware.
+ * Includes clear status indicators: enabled, muted, unavailable, permission_denied.
  */
 
 import { sound } from './sound';
 
+export type MicrophoneStatus = 'enabled' | 'muted' | 'unavailable' | 'permission_denied';
+
 export interface VoiceChatState {
+  status: MicrophoneStatus;
   isMicOn: boolean;
   hasPermission: boolean;
   permissionDenied: boolean;
@@ -28,6 +31,7 @@ class VoiceChatService {
   private partnerAudioInterval: number | null = null;
 
   private state: VoiceChatState = {
+    status: 'muted',
     isMicOn: false,
     hasPermission: false,
     permissionDenied: false,
@@ -36,13 +40,26 @@ class VoiceChatService {
     isSpeaking: false,
     partnerSpeaking: false,
     partnerVolume: 0.8,
-    statusMessage: 'Microphone is OFF'
+    statusMessage: 'Microphone is Muted'
   };
 
   private listeners: ((state: VoiceChatState) => void)[] = [];
 
   constructor() {
-    this.startPartnerSimulation();
+    // Monitor hardware device changes (e.g. headset disconnect)
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.addEventListener) {
+      navigator.mediaDevices.addEventListener('devicechange', () => {
+        if (this.mediaStream) {
+          const activeTracks = this.mediaStream.getAudioTracks().filter((t) => t.readyState === 'live');
+          if (activeTracks.length === 0) {
+            this.disableMic();
+            this.state.status = 'unavailable';
+            this.state.statusMessage = 'Microphone disconnected';
+            this.notify();
+          }
+        }
+      });
+    }
   }
 
   public subscribe(callback: (state: VoiceChatState) => void) {
@@ -61,50 +78,84 @@ class VoiceChatService {
     try {
       sound.playMicOn();
 
-      // Try accessing real physical microphone first
-      if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true
-            }
-          });
-
-          this.mediaStream = stream;
-          this.state.hasPermission = true;
-          this.state.permissionDenied = false;
-          this.state.isMicOn = true;
-          this.state.isVirtualMic = false;
-          this.state.statusMessage = 'Microphone LIVE (Hardware mic active)';
-
-          // Setup Web Audio Analyser
-          const AudioCtxClass =
-            window.AudioContext ||
-            (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-          this.audioCtx = new AudioCtxClass();
-          if (this.audioCtx.state === 'suspended') {
-            await this.audioCtx.resume();
-          }
-
-          const source = this.audioCtx.createMediaStreamSource(stream);
-          this.analyser = this.audioCtx.createAnalyser();
-          this.analyser.fftSize = 256;
-          this.analyser.smoothingTimeConstant = 0.5;
-          source.connect(this.analyser);
-
-          this.startAudioLoop();
-          this.notify();
-          return true;
-        } catch (hardwareErr) {
-          console.warn('Physical microphone unavailable or denied in this frame, activating Virtual Voice channel:', hardwareErr);
-        }
+      // Check device availability
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+        this.state.status = 'unavailable';
+        this.state.statusMessage = 'Audio recording not supported in this browser';
+        this.notify();
+        this.startVirtualVoice();
+        return true;
       }
 
-      // Fallback: Virtual Voice Channel (Guarantees mic turns ON in any iframe, APK, or permission-restricted environment!)
-      this.startVirtualVoice();
-      return true;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+
+        // Listen for track ending (e.g. user unplugs mic or browser revokes permission)
+        stream.getAudioTracks().forEach((track) => {
+          track.onended = () => {
+            this.disableMic();
+            this.state.status = 'unavailable';
+            this.state.statusMessage = 'Microphone was unplugged or stopped';
+            this.notify();
+          };
+        });
+
+        this.mediaStream = stream;
+        this.state.status = 'enabled';
+        this.state.hasPermission = true;
+        this.state.permissionDenied = false;
+        this.state.isMicOn = true;
+        this.state.isVirtualMic = false;
+        this.state.statusMessage = 'Microphone LIVE (Hardware mic active)';
+
+        // Setup Web Audio Analyser
+        const AudioCtxClass =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        this.audioCtx = new AudioCtxClass();
+        if (this.audioCtx.state === 'suspended') {
+          await this.audioCtx.resume();
+        }
+
+        const source = this.audioCtx.createMediaStreamSource(stream);
+        this.analyser = this.audioCtx.createAnalyser();
+        this.analyser.fftSize = 256;
+        this.analyser.smoothingTimeConstant = 0.5;
+        source.connect(this.analyser);
+
+        this.startAudioLoop();
+        this.notify();
+        return true;
+      } catch (hardwareErr: any) {
+        console.warn('Physical microphone error:', hardwareErr);
+        if (hardwareErr.name === 'NotAllowedError' || hardwareErr.name === 'PermissionDeniedError') {
+          this.state.status = 'permission_denied';
+          this.state.permissionDenied = true;
+          this.state.hasPermission = false;
+          this.state.isMicOn = false;
+          this.state.statusMessage = 'Microphone permission denied';
+          this.notify();
+          return false;
+        }
+
+        if (hardwareErr.name === 'NotFoundError' || hardwareErr.name === 'DevicesNotFoundError') {
+          this.state.status = 'unavailable';
+          this.state.statusMessage = 'No microphone device found';
+          this.notify();
+          this.startVirtualVoice();
+          return true;
+        }
+
+        // Other iframe/permission constraint: activate virtual channel
+        this.startVirtualVoice();
+        return true;
+      }
     } catch (err) {
       console.warn('Voice activation fallback encountered:', err);
       this.startVirtualVoice();
@@ -113,6 +164,7 @@ class VoiceChatService {
   }
 
   private startVirtualVoice() {
+    this.state.status = 'enabled';
     this.state.hasPermission = false;
     this.state.permissionDenied = false;
     this.state.isMicOn = true;
@@ -122,21 +174,18 @@ class VoiceChatService {
     this.state.isSpeaking = true;
     this.notify();
 
-    // Clear existing virtual interval if any
     if (this.virtualIntervalId !== null) {
       window.clearInterval(this.virtualIntervalId);
     }
 
-    // Oscillate virtual voice meter naturally to simulate speech transmissions
     let step = 0;
     this.virtualIntervalId = window.setInterval(() => {
       if (!this.state.isMicOn) return;
       step++;
-      // Natural oscillating voice wave
       const base = 0.35 + 0.25 * Math.sin(step * 0.4);
       const jitter = (Math.random() - 0.5) * 0.15;
       const level = Math.max(0.1, Math.min(0.9, base + jitter));
-      
+
       this.state.audioLevel = level;
       this.state.isSpeaking = level > 0.25;
       this.notify();
@@ -172,11 +221,12 @@ class VoiceChatService {
 
     this.state = {
       ...this.state,
+      status: 'muted',
       isMicOn: false,
       audioLevel: 0,
       isSpeaking: false,
       isVirtualMic: false,
-      statusMessage: 'Microphone Muted (Press M or Tap Mic to Unmute)'
+      statusMessage: 'Microphone Muted'
     };
     this.notify();
   }
@@ -219,12 +269,11 @@ class VoiceChatService {
     this.animFrameId = requestAnimationFrame(checkLevel);
   }
 
-  // Teammate/Partner simulated voice chatter in co-op session
-  private startPartnerSimulation() {
+  public startPartnerSimulation() {
+    if (this.partnerAudioInterval !== null) return;
     let tickCount = 0;
     this.partnerAudioInterval = window.setInterval(() => {
       tickCount++;
-      // Every 12-16 seconds, partner speaks for a 3-second burst
       if (tickCount % 12 === 0) {
         this.state.partnerSpeaking = true;
         this.notify();
@@ -235,6 +284,15 @@ class VoiceChatService {
         }, 3200);
       }
     }, 1000);
+  }
+
+  public stopPartnerSimulation() {
+    if (this.partnerAudioInterval !== null) {
+      clearInterval(this.partnerAudioInterval);
+      this.partnerAudioInterval = null;
+    }
+    this.state.partnerSpeaking = false;
+    this.notify();
   }
 
   public setPartnerSpeaking(speaking: boolean) {
