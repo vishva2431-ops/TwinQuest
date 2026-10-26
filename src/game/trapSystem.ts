@@ -63,25 +63,65 @@ export class TrapManager {
   ) {
     this.clear();
 
-    // 1. Build Moving Platforms
+    // 1. Build Moving Platforms (Magical Floating Rune Slabs)
     platforms.forEach((p) => {
       if (p.isMoving) {
-        const geo = new THREE.BoxGeometry(p.size[0], p.size[1], p.size[2]);
+        const [w, h, d] = p.size;
+        const group = new THREE.Group();
+        group.position.set(p.position[0], p.position[1], p.position[2]);
+
+        // Main Rune Stone Slab
+        const geo = new THREE.BoxGeometry(w, h, d);
         const mat = new THREE.MeshStandardMaterial({
-          color: p.color || accentColor,
-          roughness: 0.35,
-          metalness: 0.5
+          color: '#334155',
+          roughness: 0.4,
+          metalness: 0.3
         });
         const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(p.position[0], p.position[1], p.position[2]);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        this.parentScene.add(mesh);
+        group.add(mesh);
+
+        // Top Magic Grass / Rune Inlay
+        const topInlayGeo = new THREE.BoxGeometry(w * 0.9, 0.04, d * 0.9);
+        const topInlayMat = new THREE.MeshStandardMaterial({
+          color: '#22c55e',
+          roughness: 0.6
+        });
+        const topInlay = new THREE.Mesh(topInlayGeo, topInlayMat);
+        topInlay.position.y = h * 0.5 + 0.02;
+        group.add(topInlay);
+
+        // Glowing Magical Perimeter Neon Trim
+        const trimGeo = new THREE.BoxGeometry(w + 0.06, 0.08, d + 0.06);
+        const trimMat = new THREE.MeshStandardMaterial({
+          color: p.color || '#38bdf8',
+          emissive: p.color || '#38bdf8',
+          emissiveIntensity: 0.8,
+          roughness: 0.2
+        });
+        const trim = new THREE.Mesh(trimGeo, trimMat);
+        group.add(trim);
+
+        // Underside Levitation Crystal
+        const crystalGeo = new THREE.OctahedronGeometry(Math.min(w, d) * 0.25, 0);
+        const crystalMat = new THREE.MeshStandardMaterial({
+          color: '#c084fc',
+          emissive: '#9333ea',
+          emissiveIntensity: 0.9,
+          roughness: 0.1,
+          metalness: 0.8
+        });
+        const crystal = new THREE.Mesh(crystalGeo, crystalMat);
+        crystal.position.y = -h * 0.5 - 0.25;
+        group.add(crystal);
+
+        this.parentScene.add(group);
 
         this.movingPlatforms.push({
           config: p,
-          mesh,
-          initialPos: mesh.position.clone()
+          mesh: group as unknown as THREE.Mesh,
+          initialPos: group.position.clone()
         });
       }
     });
@@ -274,11 +314,24 @@ export class TrapManager {
           roughness: 0.15,
           metalness: 0.4,
           emissive: '#e11d48',
-          emissiveIntensity: 0.4
+          emissiveIntensity: 0.6
         });
         const heartMesh = new THREE.Mesh(heartGeo, heartMat);
         heartMesh.scale.set(1.4, 1.4, 1.4);
         group.add(heartMesh);
+
+        // Swirling Golden Halo Ring
+        const ringGeo = new THREE.TorusGeometry(0.58, 0.024, 8, 24);
+        const ringMat = new THREE.MeshStandardMaterial({
+          color: '#fbbf24',
+          emissive: '#f59e0b',
+          emissiveIntensity: 0.9,
+          metalness: 0.85,
+          roughness: 0.2
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = Math.PI * 0.4;
+        group.add(ring);
       } else {
         // Gem / Diamond octahedron
         const gemGeo = new THREE.OctahedronGeometry(0.3, 0);
@@ -348,7 +401,9 @@ export class TrapManager {
     time: number,
     p1Pos: THREE.Vector3,
     p2Pos: THREE.Vector3,
-    onPlayerHitTrap: (trapType: string) => void
+    onPlayerHitTrap: (trapType: string) => void,
+    onCollectItem?: (collector: 'boy' | 'girl' | 'both', itemType: string) => void,
+    onCheckpoint?: (activator: 'boy' | 'girl' | 'both') => void
   ) {
     // 1. Update Moving Platforms
     this.movingPlatforms.forEach((p) => {
@@ -378,6 +433,8 @@ export class TrapManager {
           } else {
             sound.playGemCollect();
           }
+          const collector = d1 < 1.1 && d2 < 1.1 ? 'both' : d1 < 1.1 ? 'boy' : 'girl';
+          onCollectItem?.(collector, c.config.type);
         }
       }
     });
@@ -398,6 +455,8 @@ export class TrapManager {
           (cp.crystalMesh.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.0;
           cp.light.intensity = 2.0;
           sound.playCheckpoint();
+          const activator = d1 < 1.5 && d2 < 1.5 ? 'both' : d1 < 1.5 ? 'boy' : 'girl';
+          onCheckpoint?.(activator);
         }
       }
     });

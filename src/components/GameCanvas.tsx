@@ -393,11 +393,26 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         loveTetherMaterial.opacity = Math.max(0.1, 0.7 - dist * 0.04);
       }
 
-      // Animate Sacred Goal Portal
-      goalPortal.rotation.y += delta * 1.2;
+      // Animate Sacred Goal Portal & Golden Magical Trails
+      const portalEnergy = goalPortal.getObjectByName('portalHeartEnergy');
+      if (portalEnergy) {
+        const pulse = 1.0 + Math.sin(controller.gameTime * 3.5) * 0.06;
+        portalEnergy.scale.set(pulse, pulse, pulse);
+      }
 
-      // Atmospheric Particles
-      particles.rotation.y += delta * 0.05;
+      const goldenTrails = goalPortal.getObjectByName('portalGoldenTrails');
+      if (goldenTrails) {
+        goldenTrails.rotation.y += delta * 1.5;
+        goldenTrails.rotation.z += delta * 0.6;
+      }
+
+      // Drift Clouds Slowly
+      if (sceneContext.cloudsGroup) {
+        sceneContext.cloudsGroup.position.x = Math.sin(controller.gameTime * 0.04) * 6;
+      }
+
+      // Atmospheric Particles Drift
+      particles.rotation.y += delta * 0.04;
 
       // Smooth Camera Follow Focus
       const targetFocus = new THREE.Vector3();

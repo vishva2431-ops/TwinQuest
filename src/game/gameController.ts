@@ -418,20 +418,46 @@ export class GameController {
       this.updatePlayerPhysics(this.girlState, this.girlRig, gMoveX, gMoveZ, gJump, dt);
     }
 
-    // Update Traps & Collision
-    this.trapManager.update(dt, this.gameTime, this.boyState.position, this.girlState.position, (trapType) => {
-      // Surprise Trap Hit! (guests wait for the host's verdict)
-      if (this.isOnlineGuest) return;
-      if (!this.boyState.isDead && !this.girlState.isDead) {
-        sound.playDeath();
-        this.boyState.isDead = true;
-        this.girlState.isDead = true;
-        this.boyState.respawnTimer = 1.0;
-        this.girlState.respawnTimer = 1.0;
-        deathsCount++;
-        this.emitDeath();
+    // Update Traps, Collectibles & Checkpoints
+    this.trapManager.update(
+      dt,
+      this.gameTime,
+      this.boyState.position,
+      this.girlState.position,
+      (trapType) => {
+        // Surprise Trap Hit!
+        this.boyRig.facialController.triggerEvent('trap_near', { duration: 1.5 });
+        this.girlRig.facialController.triggerEvent('trap_near', { duration: 1.5 });
+        if (this.isOnlineGuest) return;
+        if (!this.boyState.isDead && !this.girlState.isDead) {
+          sound.playDeath();
+          this.boyState.isDead = true;
+          this.girlState.isDead = true;
+          this.boyState.respawnTimer = 1.0;
+          this.girlState.respawnTimer = 1.0;
+          deathsCount++;
+          this.emitDeath();
+        }
+      },
+      (collector, itemType) => {
+        // Collect Item Event: triggers beaming smile & happy expression!
+        if (collector === 'boy' || collector === 'both') {
+          this.boyRig.facialController.triggerEvent('collect_item', { duration: 1.5 });
+        }
+        if (collector === 'girl' || collector === 'both') {
+          this.girlRig.facialController.triggerEvent('collect_item', { duration: 1.5 });
+        }
+      },
+      (activator) => {
+        // Checkpoint Event: confident smile!
+        if (activator === 'boy' || activator === 'both') {
+          this.boyRig.facialController.triggerEvent('checkpoint', { duration: 1.2 });
+        }
+        if (activator === 'girl' || activator === 'both') {
+          this.girlRig.facialController.triggerEvent('checkpoint', { duration: 1.2 });
+        }
       }
-    });
+    );
 
     // Check Fall Death into Void
     // Guests only report their OWN fall (the host sees the rest through the host-side check below)
@@ -482,10 +508,15 @@ export class GameController {
     if (nearGoal(this.boyState.position) && nearGoal(this.girlState.position) && !this.isVictory && !this.boyState.isDead && !this.girlState.isDead) {
       this.isVictory = true;
       sound.playVictory();
+      this.boyRig.facialController.triggerEvent('victory', { duration: 5.0 });
+      this.girlRig.facialController.triggerEvent('victory', { duration: 5.0 });
       this.onGameEvent?.({ type: 'victory', finalTime: this.levelTimer });
     }
 
-    // Update Character Animation Kinematics
+    // Update Character Animation Kinematics with Expressive Facial State Machine
+    const boySurprised = this.boyState.velocity.y < -4.0 || (this.boyState.isDead && this.boyState.respawnTimer > 0.6);
+    const girlSurprised = this.girlState.velocity.y < -4.0 || (this.girlState.isDead && this.girlState.respawnTimer > 0.6);
+
     const boyAnimState: CharacterAnimationState = {
       velocity: this.boyState.velocity,
       isGrounded: this.boyState.isGrounded,
@@ -493,6 +524,7 @@ export class GameController {
       isFalling: this.boyState.velocity.y < -0.5,
       isDead: this.boyState.isDead,
       isCheering: this.isVictory,
+      isSurprised: boySurprised,
       lookAtPartnerPos: this.girlState.position
     };
     this.boyRig.updateAnimation(boyAnimState, dt);
@@ -504,6 +536,7 @@ export class GameController {
       isFalling: this.girlState.velocity.y < -0.5,
       isDead: this.girlState.isDead,
       isCheering: this.isVictory,
+      isSurprised: girlSurprised,
       lookAtPartnerPos: this.boyState.position
     };
     this.girlRig.updateAnimation(girlAnimState, dt);
@@ -570,6 +603,7 @@ export class GameController {
       state.coyoteTimer = 0;
       state.jumpBufferTimer = 0;
       sound.playJump();
+      rig.facialController.triggerEvent('jump');
     }
 
     // 4. Proposed Position
@@ -611,9 +645,10 @@ export class GameController {
           state.velocity.y = 0;
           landed = true;
 
-          // Sound on landing
+          // Sound and facial blink on landing
           if (!state.isGrounded) {
             sound.playLand();
+            rig.facialController.triggerEvent('land');
           }
         }
       }
