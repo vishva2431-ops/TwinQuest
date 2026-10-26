@@ -13,18 +13,25 @@ import {
   AlertCircle,
   ShieldCheck,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Play,
+  Wifi,
+  WifiOff,
+  Globe
 } from 'lucide-react';
 import { PlayerProfile, CharacterGender } from '../types/game';
 import { sound } from '../services/sound';
 import { storage } from '../services/storage';
+import { useNetworkStatus } from '../services/networkStatus';
 
 interface LoginPageProps {
   initialProfile?: PlayerProfile;
   onLoginSuccess: (profile: PlayerProfile) => void;
+  onPlayOffline?: (profile: PlayerProfile) => void;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ initialProfile, onLoginSuccess }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ initialProfile, onLoginSuccess, onPlayOffline }) => {
+  const isOnline = useNetworkStatus();
   const baseProfile = initialProfile || storage.getProfile();
   const [mode, setMode] = useState<'login' | 'register'>('login');
 
@@ -102,21 +109,40 @@ export const LoginPage: React.FC<LoginPageProps> = ({ initialProfile, onLoginSuc
       username: name.trim() || 'Adventurer',
       activeCharacter: selectedGender,
       boyName: boyName.trim() || 'Boyfriend',
-      girlName: girlName.trim() || 'Girlfriend'
+      girlName: girlName.trim() || 'Girlfriend',
+      isGuest: true
     };
     storage.saveProfile(updated);
     onLoginSuccess(updated);
   };
 
+  const handlePlayOffline = () => {
+    sound.playButtonClick();
+    const updated: PlayerProfile = {
+      ...baseProfile,
+      username: name.trim() || 'Adventurer',
+      activeCharacter: selectedGender,
+      boyName: boyName.trim() || 'Boyfriend',
+      girlName: girlName.trim() || 'Girlfriend',
+      isGuest: true
+    };
+    storage.saveProfile(updated);
+    if (onPlayOffline) {
+      onPlayOffline(updated);
+    } else {
+      onLoginSuccess(updated);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center px-4 py-8 relative overflow-hidden font-sans selection:bg-rose-500 selection:text-white">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center px-3 sm:px-6 py-6 sm:py-10 relative overflow-hidden font-sans selection:bg-rose-500 selection:text-white">
       {/* Dynamic Background Glow */}
       <div className="absolute top-1/4 -left-28 w-96 h-96 bg-rose-600/15 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 -right-28 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute top-12 left-1/2 -translate-x-1/2 w-full max-w-4xl h-48 bg-gradient-to-b from-rose-500/10 to-transparent blur-2xl pointer-events-none" />
 
       {/* Main Container */}
-      <div className="w-full max-w-md relative z-10 space-y-6">
+      <div className="w-full max-w-md relative z-10 space-y-5 sm:space-y-6">
         {/* Game Logo & Header */}
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs text-rose-400 font-semibold shadow-inner">
@@ -138,7 +164,35 @@ export const LoginPage: React.FC<LoginPageProps> = ({ initialProfile, onLoginSuc
         </div>
 
         {/* Login Card */}
-        <div className="bg-slate-900/90 border border-slate-800/90 backdrop-blur-xl rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+        <div className="bg-slate-900/90 border border-slate-800/90 backdrop-blur-xl rounded-3xl p-4 sm:p-8 shadow-2xl space-y-5 sm:space-y-6">
+          {/* Live Network Status Indicator */}
+          <div className={`p-2.5 rounded-2xl border flex items-center justify-between text-xs transition-all ${
+            isOnline
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+              : 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+          }`}>
+            <div className="flex items-center gap-2">
+              {isOnline ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="font-semibold text-[11px]">Online: Ready for Multiplayer with Friends</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="font-semibold text-[11px]">Offline Mode: Single Player Ready (No Internet)</span>
+                </>
+              )}
+            </div>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+              isOnline
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+            }`}>
+              {isOnline ? 'Online' : 'Offline'}
+            </span>
+          </div>
+
           {/* Mode Switcher Tabs */}
           <div className="flex p-1 bg-slate-950/80 rounded-2xl border border-slate-800">
             <button
@@ -474,26 +528,60 @@ export const LoginPage: React.FC<LoginPageProps> = ({ initialProfile, onLoginSuc
               </div>
             </div>
 
-            {/* Direct Submit Button */}
+            {/* Primary Action: Play Single Player (Offline Mode) */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/40 via-slate-950 to-slate-900 border border-emerald-500/40 space-y-2.5 shadow-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wide">
+                  <Play className="w-4 h-4 fill-emerald-400" />
+                  <span>Single Player (Offline Mode)</span>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  100% Offline
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                Play solo immediately with your {selectedGender === 'boy' ? 'Male' : 'Female'} character. No login or internet connection needed!
+              </p>
+              <button
+                type="button"
+                onClick={handlePlayOffline}
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/30 transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                <Play className="w-4 h-4 fill-white" />
+                <span>START SINGLE PLAYER (OFFLINE)</span>
+              </button>
+            </div>
+
+            {/* Online Mode Divider */}
+            <div className="relative flex py-1 items-center">
+              <div className="flex-grow border-t border-slate-800"></div>
+              <span className="flex-shrink mx-3 text-[10px] font-bold text-rose-400/90 tracking-wider uppercase flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5" />
+                <span>Or Play Online With Friends</span>
+              </span>
+              <div className="flex-grow border-t border-slate-800"></div>
+            </div>
+
+            {/* Direct Submit Button for Online Multiplayer */}
             <button
               type="submit"
               className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-sm shadow-xl shadow-rose-600/30 transition-all active:scale-95 flex items-center justify-center gap-2"
             >
-              <span>{mode === 'login' ? 'Sign In & Enter TwinQuest' : 'Create Account & Enter TwinQuest'}</span>
+              <span>{mode === 'login' ? 'Sign In & Play Online' : 'Create Account & Play Online'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
 
           {/* Quick Play as Guest Divider */}
           <div className="pt-2 border-t border-slate-800/80 text-center space-y-3">
-            <span className="text-[11px] text-slate-500">Or continue without account</span>
+            <span className="text-[11px] text-slate-500">Or continue online without account</span>
             <button
               type="button"
               onClick={handleGuestLogin}
               className="w-full py-3 rounded-2xl bg-slate-800/90 hover:bg-slate-750 text-slate-200 text-xs font-bold border border-slate-700/80 hover:border-slate-600 transition-all active:scale-95 flex items-center justify-center gap-2"
             >
               <Gamepad2 className="w-4 h-4 text-rose-400" />
-              <span>Enter TwinQuest as Guest</span>
+              <span>Enter Online Rooms as Guest</span>
             </button>
           </div>
         </div>

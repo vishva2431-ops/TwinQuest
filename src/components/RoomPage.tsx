@@ -24,6 +24,7 @@ import { sound } from '../services/sound';
 import { RoomState, PlayerProfile, CharacterGender } from '../types/game';
 import { WORLDS_DATA, storage } from '../services/storage';
 import { voiceChat, VoiceChatState } from '../services/voiceChat';
+import { useNetworkStatus } from '../services/networkStatus';
 
 interface RoomPageProps {
   profile: PlayerProfile;
@@ -38,6 +39,7 @@ interface RoomPageProps {
 }
 
 export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBackToMenu }) => {
+  const isOnline = useNetworkStatus();
   const [room, setRoom] = useState<RoomState | null>(multiplayer.getActiveRoom());
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -140,16 +142,16 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
   return (
     <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-8">
       {/* Header with Supabase Realtime Status Badge */}
-      <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="mb-6 sm:mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-white font-serif">CO-OP MULTIPLAYER LOBBY</h1>
+          <h1 className="text-2xl sm:text-3xl font-black text-white font-serif">CO-OP MULTIPLAYER LOBBY</h1>
           <p className="text-xs text-slate-400 mt-1">
             Real 2-player online co-op via Supabase Realtime (Broadcast & Presence).
           </p>
         </div>
 
         {/* Realtime Status Pill */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-start sm:self-auto">
           {isSupabaseConfigured ? (
             <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 text-xs font-semibold shadow-inner">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -164,6 +166,30 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
           )}
         </div>
       </div>
+
+      {!isOnline && (
+        <div className="mb-6 p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 text-xs text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+              <WifiOff className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-bold text-amber-300">Offline Mode Detected</div>
+              <p className="text-slate-300 mt-0.5">
+                Online co-op rooms require an internet connection. Single Player is 100% playable offline right now!
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onStartGame(profile.currentWorldId, profile.currentLevelIndex, 'single_player')}
+            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md whitespace-nowrap active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            <Play className="w-4 h-4 fill-white" />
+            <span>Play Single Player (Offline)</span>
+          </button>
+        </div>
+      )}
 
       {!isSupabaseConfigured && (
         <div className="mb-6 p-4 rounded-2xl bg-amber-950/30 border border-amber-600/40 text-xs text-amber-200 flex items-start gap-3">
@@ -184,9 +210,9 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
 
       {!room ? (
         /* No Room Active: Create or Join */
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 max-w-4xl mx-auto">
           {/* Create Private Room Card */}
-          <div className="p-8 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col justify-between text-center relative overflow-hidden">
+          <div className="p-6 sm:p-8 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col justify-between text-center relative overflow-hidden">
             <div className="absolute -top-10 -right-10 w-32 h-32 bg-rose-500/10 rounded-full blur-2xl" />
 
             <div>
@@ -209,7 +235,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
           </div>
 
           {/* Join with Code Card */}
-          <div className="p-8 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col justify-between text-center relative overflow-hidden">
+          <div className="p-6 sm:p-8 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl flex flex-col justify-between text-center relative overflow-hidden">
             <div className="absolute -top-10 -left-10 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl" />
 
             <div>
@@ -482,10 +508,10 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
             </div>
 
             {/* Launch / Leave Controls */}
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <button
                 onClick={handleLeaveRoom}
-                className="px-5 py-3 rounded-2xl bg-slate-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 font-semibold text-xs border border-slate-700 transition-all flex items-center gap-2"
+                className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-slate-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 font-semibold text-xs border border-slate-700 transition-all flex items-center justify-center gap-2"
               >
                 <LogOut className="w-4 h-4" />
                 <span>Leave Room</span>
@@ -499,7 +525,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
                   const partner = room.player2;
                   onStartGame(room.worldId, room.levelNumber, 'online_room', partner?.id, partner?.username);
                 }}
-                className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-sm shadow-xl shadow-rose-600/30 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full sm:flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-sm shadow-xl shadow-rose-600/30 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 <Play className="w-5 h-5 fill-white" />
                 <span>
@@ -514,7 +540,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
           </div>
 
           {/* Right Col: Live Room Chat */}
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl flex flex-col justify-between min-h-[380px]">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-2xl flex flex-col justify-between min-h-[300px] sm:min-h-[380px]">
             <div>
               <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
                 <span className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -524,7 +550,7 @@ export const RoomPage: React.FC<RoomPageProps> = ({ profile, onStartGame, onBack
                 <span className="text-[10px] text-emerald-400 font-mono">Realtime</span>
               </div>
 
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-48 sm:max-h-60 overflow-y-auto pr-1">
                 <div className="text-[11px] text-slate-500 italic">
                   Room created. Chat messages broadcast in real-time between both players.
                 </div>

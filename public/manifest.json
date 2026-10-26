@@ -1,0 +1,27 @@
+{
+  "id": "/",
+  "name": "TwinQuest — 3D Co-Op Adventure",
+  "short_name": "TwinQuest",
+  "description": "Romantic 3D cooperative adventure platformer with offline single player and online multiplayer co-op.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

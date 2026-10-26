@@ -131,6 +131,11 @@ export default function App() {
           setIsAuthenticated(true);
           setCurrentTab('home');
         }}
+        onPlayOffline={(updatedProfile) => {
+          setProfile(updatedProfile);
+          setIsAuthenticated(true);
+          handleStartGame(updatedProfile.currentWorldId, updatedProfile.currentLevelIndex, 'single_player');
+        }}
       />
     );
   }
@@ -164,7 +169,7 @@ export default function App() {
       />
 
       {/* Main Content Pages */}
-      <main className="flex-1 pb-16">
+      <main className="flex-1 pb-24 lg:pb-16">
         {currentTab === 'home' && (
           <HomePage
             profile={profile}

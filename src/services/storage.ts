@@ -176,34 +176,34 @@ export const WORLDS_DATA: WorldData[] = [
 const DEFAULT_BOY_CUSTOM: CharacterCustomization = {
   outfit: 'adventurer',
   hairStyle: 'short_quiff',
-  hairColor: '#3b2518',
-  skinTone: '#e0a980',
+  hairColor: '#452210',
+  skinTone: '#ffe4cb',
   eyeColor: '#2563eb',
-  clothingPrimaryColor: '#1e3a8a',
-  clothingSecondaryColor: '#e2e8f0',
+  clothingPrimaryColor: '#2563eb', // Royal Blue Hoodie from Twin-Quest artwork
+  clothingSecondaryColor: '#ffffff',
   accessories: {
-    glasses: true,
+    glasses: false, // No glasses - keep face and sparkling eyes clear
     glassesStyle: 'modern',
     pendant: false,
     backpack: true,
-    gloves: true
+    gloves: false
   }
 };
 
 const DEFAULT_GIRL_CUSTOM: CharacterCustomization = {
   outfit: 'explorer',
   hairStyle: 'ponytail',
-  hairColor: '#78350f',
-  skinTone: '#fcd3b8',
-  eyeColor: '#059669',
-  clothingPrimaryColor: '#e11d48',
-  clothingSecondaryColor: '#fbbf24',
+  hairColor: '#5c2e17',
+  skinTone: '#ffe8d6',
+  eyeColor: '#9f2d1e', // Warm Hazel/Ruby Anime Eyes from Twin-Quest artwork
+  clothingPrimaryColor: '#ec4899', // Vibrant Hot-Pink Hoodie from Twin-Quest artwork
+  clothingSecondaryColor: '#fb7185',
   accessories: {
-    glasses: false,
+    glasses: false, // No glasses - keep face and sparkling eyes clear
     glassesStyle: 'round',
     pendant: true,
-    backpack: false,
-    gloves: true
+    backpack: true,
+    gloves: false
   }
 };
 
@@ -280,7 +280,7 @@ const INITIAL_PROFILE: PlayerProfile = {
 const INITIAL_FRIENDS: FriendItem[] = [];
 
 class StorageService {
-  private profileKey = 'twinquest_profile_v1';
+  private profileKey = 'twinquest_profile_v2';
   private progressKey = 'twinquest_progress_v1';
   private settingsKey = 'twinquest_settings_v1';
   private friendsKey = 'twinquest_friends_v1';

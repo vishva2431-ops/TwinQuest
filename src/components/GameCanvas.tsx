@@ -522,38 +522,39 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       <div ref={mountRef} className="absolute inset-0 z-0 touch-none" />
 
       {/* Top HUD Header */}
-      <div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
+      <div className="absolute top-2 sm:top-4 left-2 sm:left-4 right-2 sm:right-4 z-20 flex items-center justify-between pointer-events-none gap-1.5 sm:gap-3">
         {/* Left: Back & Level Title */}
-        <div className="flex items-center gap-3 pointer-events-auto">
+        <div className="flex items-center gap-1.5 sm:gap-3 pointer-events-auto">
           <button
             onClick={() => {
               sound.playButtonClick();
               onExitToMenu();
             }}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md transition-all active:scale-95 text-xs font-semibold"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md transition-all active:scale-95 text-xs font-semibold"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Map</span>
+            <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Map</span>
           </button>
 
-          <div className="bg-slate-900/80 border border-slate-700/60 rounded-xl px-4 py-2 shadow-lg backdrop-blur-md">
-            <div className="text-[10px] tracking-wider font-semibold text-rose-400 uppercase flex items-center gap-1.5">
+          <div className="bg-slate-900/80 border border-slate-700/60 rounded-xl px-2.5 sm:px-4 py-1.5 sm:py-2 shadow-lg backdrop-blur-md">
+            <div className="text-[9px] sm:text-[10px] tracking-wider font-semibold text-rose-400 uppercase flex items-center gap-1 sm:gap-1.5">
               <span>{world.name}</span>
               {isSinglePlayer && (
-                <span className="px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-300 text-[9px] font-bold">
-                  Single-Player
+                <span className="hidden md:inline-flex px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-bold border border-emerald-500/30 items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span>Offline</span>
                 </span>
               )}
               {isOnlineRoom && (
-                <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-bold flex items-center gap-1">
-                  <Wifi className="w-2.5 h-2.5" />
-                  <span>Online Co-Op</span>
+                <span className="hidden md:inline-flex px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-300 text-[9px] font-bold border border-blue-500/30 items-center gap-1">
+                  <Wifi className="w-2.5 h-2.5 text-blue-400" />
+                  <span>Online</span>
                 </span>
               )}
             </div>
-            <div className="text-sm font-bold text-white flex items-center gap-2">
-              <span>Level {levelNumber}</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
+            <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5 sm:gap-2">
+              <span>Lvl {levelNumber}</span>
+              <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
                 {Math.floor(levelTimer / 60)}:{(levelTimer % 60).toFixed(1).padStart(4, '0')}
               </span>
             </div>
@@ -561,7 +562,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         </div>
 
         {/* Center: Romantic Hearts Collected */}
-        <div className="flex items-center gap-2 bg-slate-900/80 border border-rose-900/50 rounded-2xl px-4 py-2 shadow-lg backdrop-blur-md pointer-events-auto">
+        <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-900/80 border border-rose-900/50 rounded-2xl px-2.5 sm:px-4 py-1.5 sm:py-2 shadow-lg backdrop-blur-md pointer-events-auto">
           {[0, 1, 2].map((idx) => (
             <div
               key={idx}
@@ -570,24 +571,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               }`}
             >
               <Heart
-                className={`w-5 h-5 ${
+                className={`w-4 h-4 sm:w-5 sm:h-5 ${
                   collectedHearts[idx] ? 'fill-rose-500 drop-shadow-[0_0_8px_rgba(244,63,94,0.8)]' : ''
                 }`}
               />
             </div>
           ))}
-          <span className="text-xs font-semibold text-rose-200 ml-1">
+          <span className="text-[11px] sm:text-xs font-semibold text-rose-200 ml-0.5 sm:ml-1">
             {collectedHearts.filter(Boolean).length}/3
           </span>
         </div>
 
         {/* Right: Partner Distance, Sound & Pause */}
-        <div className="flex items-center gap-2 pointer-events-auto">
+        <div className="flex items-center gap-1 sm:gap-2 pointer-events-auto">
           {/* Active Character Badge in Single Player */}
           {isSinglePlayer && (
-            <div className="hidden sm:flex items-center gap-1.5 bg-slate-900/80 border border-slate-700/60 rounded-xl px-3 py-2 shadow-lg backdrop-blur-md text-xs font-medium text-slate-200">
+            <div className="hidden lg:flex items-center gap-1.5 bg-slate-900/80 border border-emerald-500/40 rounded-xl px-3 py-2 shadow-lg backdrop-blur-md text-xs font-medium text-emerald-300">
               <span>{activeGender === 'boy' ? '👦' : '👧'}</span>
-              <span>{activeGender === 'boy' ? (profile.boyName || 'Boyfriend') : (profile.girlName || 'Girlfriend')}</span>
+              <span>{activeGender === 'boy' ? (profile.boyName || 'Boyfriend') : (profile.girlName || 'Girlfriend')} (Offline)</span>
             </div>
           )}
 
@@ -599,32 +600,34 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             </div>
           )}
 
-          {/* User Voice Mic Toggle Button */}
-          <button
-            onClick={handleToggleMic}
-            className={`px-3 py-2 rounded-xl border shadow-lg backdrop-blur-md transition-all active:scale-95 flex items-center gap-2 ${
-              voiceState.isMicOn
-                ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300 ring-2 ring-emerald-500/30'
-                : 'bg-slate-900/80 hover:bg-slate-800 text-slate-400 border-slate-700/60'
-            }`}
-            title={voiceState.isMicOn ? 'Microphone LIVE (Press M to Mute)' : 'Microphone MUTED (Press M to Speak)'}
-          >
-            {voiceState.isMicOn ? (
-              <Mic className={`w-4 h-4 ${voiceState.isSpeaking ? 'text-emerald-400 animate-pulse' : 'text-emerald-400'}`} />
-            ) : (
-              <MicOff className="w-4 h-4 text-slate-400" />
-            )}
-            <span className="hidden sm:inline text-xs font-bold">
-              {voiceState.isMicOn ? (voiceState.isSpeaking ? 'Live...' : 'Mic ON') : 'Mic OFF'}
-            </span>
-          </button>
+          {/* User Voice Mic Toggle Button (Only in online/co-op mode) */}
+          {!isSinglePlayer && (
+            <button
+              onClick={handleToggleMic}
+              className={`p-2 sm:px-3 sm:py-2 rounded-xl border shadow-lg backdrop-blur-md transition-all active:scale-95 flex items-center gap-1.5 sm:gap-2 ${
+                voiceState.isMicOn
+                  ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300 ring-2 ring-emerald-500/30'
+                  : 'bg-slate-900/80 hover:bg-slate-800 text-slate-400 border-slate-700/60'
+              }`}
+              title={voiceState.isMicOn ? 'Microphone LIVE (Press M to Mute)' : 'Microphone MUTED (Press M to Speak)'}
+            >
+              {voiceState.isMicOn ? (
+                <Mic className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${voiceState.isSpeaking ? 'text-emerald-400 animate-pulse' : 'text-emerald-400'}`} />
+              ) : (
+                <MicOff className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400" />
+              )}
+              <span className="hidden md:inline text-xs font-bold">
+                {voiceState.isMicOn ? (voiceState.isSpeaking ? 'Live...' : 'Mic ON') : 'Mic OFF'}
+              </span>
+            </button>
+          )}
 
           <button
             onClick={toggleSound}
-            className="p-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md transition-all active:scale-95"
+            className="p-2 sm:p-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md transition-all active:scale-95"
             title="Toggle Sound"
           >
-            {soundMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
+            {soundMuted ? <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-400" /> : <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />}
           </button>
 
           <button
@@ -634,10 +637,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 controllerRef.current.resetToCheckpoint();
               }
             }}
-            className="p-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md transition-all active:scale-95"
+            className="p-2 sm:p-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md transition-all active:scale-95"
             title="Restart Checkpoint (R)"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
           <button
@@ -650,10 +653,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 return !p;
               });
             }}
-            className="p-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md transition-all active:scale-95"
+            className="p-2 sm:p-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md transition-all active:scale-95"
             title="Pause (Esc)"
           >
-            <Pause className="w-4 h-4" />
+            <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
         </div>
       </div>

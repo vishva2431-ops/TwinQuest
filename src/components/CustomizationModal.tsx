@@ -14,28 +14,28 @@ interface CustomizationModalProps {
 }
 
 const OUTFITS = [
-  { id: 'adventurer', name: 'Adventurer Gear', desc: 'Rugged leather jacket & tactical boots', color: '#1e3a8a', accent: '#fbbf24' },
-  { id: 'explorer', name: 'Sunset Explorer', desc: 'Breathable utility vest & cargo flex', color: '#e11d48', accent: '#f59e0b' },
-  { id: 'casual', name: 'Casual Chic', desc: 'Urban hoodie & stylish sneakers', color: '#4f46e5', accent: '#38bdf8' },
-  { id: 'cyber', name: 'Cyber Hunter', desc: 'High-tech neon fiber weave', color: '#0f172a', accent: '#06b6d4' },
-  { id: 'royal', name: 'Royal Formal', desc: 'Gold embroidered velvet tunic', color: '#881337', accent: '#fde047' }
+  { id: 'twinquest', name: 'TwinQuest Signature', desc: 'Iconic cozy adventure hoodie & chunky sneakers', color: '#2563eb', accent: '#ffffff' },
+  { id: 'explorer', name: 'Sunset Explorer', desc: 'Warm sunrise adventure hoodie', color: '#ec4899', accent: '#fbbf24' },
+  { id: 'forest', name: 'Emerald Forest', desc: 'Lush trail hoodie & white sneakers', color: '#10b981', accent: '#a7f3d0' },
+  { id: 'cyber', name: 'Neon Cyber', desc: 'High-tech glowing fiber hoodie', color: '#06b6d4', accent: '#e0f2fe' },
+  { id: 'royal', name: 'Royal Amethyst', desc: 'Royal velvet hoodie & gold trim', color: '#7c3aed', accent: '#fde047' }
 ];
 
 const HAIR_STYLES_BOY = [
-  { id: 'short_quiff', name: 'Undercut Quiff' },
+  { id: 'short_quiff', name: 'Anime Layered Tufts' },
   { id: 'textured_crop', name: 'Textured Crop' },
   { id: 'swept_back', name: 'Swept Back' }
 ];
 
 const HAIR_STYLES_GIRL = [
-  { id: 'ponytail', name: 'High Ponytail' },
+  { id: 'ponytail', name: 'High Bouncy Ponytail' },
   { id: 'long_waves', name: 'Flowing Waves' },
   { id: 'braids', name: 'Adventure Braids' }
 ];
 
-const HAIR_COLORS = ['#3b2518', '#78350f', '#18181b', '#d97706', '#f43f5e', '#6366f1', '#e2e8f0'];
-const SKIN_TONES = ['#fcd3b8', '#e0a980', '#c28766', '#8d5b4c', '#573327'];
-const EYE_COLORS = ['#2563eb', '#059669', '#7c3aed', '#b45309', '#0f172a', '#e11d48'];
+const HAIR_COLORS = ['#452210', '#5c2e17', '#78350f', '#18181b', '#d97706', '#f43f5e', '#6366f1', '#e2e8f0'];
+const SKIN_TONES = ['#ffe4cb', '#ffe8d6', '#fcd3b8', '#e0a980', '#c28766', '#8d5b4c'];
+const EYE_COLORS = ['#2563eb', '#9f2d1e', '#059669', '#7c3aed', '#b45309', '#0f172a', '#e11d48'];
 
 export const CustomizationModal: React.FC<CustomizationModalProps> = ({
   isOpen,
@@ -73,36 +73,58 @@ export const CustomizationModal: React.FC<CustomizationModalProps> = ({
     const height = previewMountRef.current.clientHeight || 420;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#090d16');
+    scene.background = new THREE.Color('#0c1322');
 
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 50);
-    camera.position.set(0, 1.1, 2.8);
+    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 50);
+    camera.position.set(0, 0.96, 2.2);
+    camera.lookAt(0, 0.88, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
     previewMountRef.current.appendChild(renderer.domElement);
 
-    // Studio 3-Point Lighting
-    const amb = new THREE.HemisphereLight('#fef08a', '#1e293b', 1.0);
+    // Studio 4-Point Anime Lighting
+    const amb = new THREE.HemisphereLight('#ffffff', '#334155', 1.4);
     scene.add(amb);
 
-    const keyLight = new THREE.DirectionalLight('#fff7ed', 1.8);
-    keyLight.position.set(3, 5, 4);
+    const keyLight = new THREE.DirectionalLight('#fffbeb', 2.2);
+    keyLight.position.set(1.5, 3.5, 3.5);
     scene.add(keyLight);
 
-    const rimLight = new THREE.DirectionalLight('#f43f5e', 0.8);
-    rimLight.position.set(-3, 3, -3);
+    const fillLight = new THREE.DirectionalLight('#e0f2fe', 1.2);
+    fillLight.position.set(-2.0, 1.8, 3.0);
+    scene.add(fillLight);
+
+    const rimLight = new THREE.DirectionalLight('#fb7185', 1.4);
+    rimLight.position.set(0, 3.0, -3.0);
     scene.add(rimLight);
 
-    // Soft Circular Pedestal
-    const pedestalGeo = new THREE.CylinderGeometry(0.8, 0.9, 0.15, 32);
+    const bounce = new THREE.PointLight('#f59e0b', 0.8, 4);
+    bounce.position.set(0, 0.2, 0.6);
+    scene.add(bounce);
+
+    // Soft Circular Pedestal with Golden Ring
+    const pedestalGeo = new THREE.CylinderGeometry(0.8, 0.9, 0.12, 32);
     const pedestalMat = new THREE.MeshStandardMaterial({ color: '#1e293b', metalness: 0.8, roughness: 0.2 });
     const pedestal = new THREE.Mesh(pedestalGeo, pedestalMat);
-    pedestal.position.y = -0.08;
+    pedestal.position.y = -0.06;
     scene.add(pedestal);
+
+    const ringGeo = new THREE.TorusGeometry(0.72, 0.025, 12, 32);
+    const ringMat = new THREE.MeshStandardMaterial({
+      color: '#fbbf24',
+      metalness: 0.9,
+      roughness: 0.15,
+      emissive: new THREE.Color('#d97706'),
+      emissiveIntensity: 0.35
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    scene.add(ring);
 
     // Character Rig
     const rig = createCharacterRig(selectedGender, custom);
@@ -138,8 +160,20 @@ export const CustomizationModal: React.FC<CustomizationModalProps> = ({
 
     animate();
 
+    const handleResize = () => {
+      if (!previewMountRef.current) return;
+      const newW = previewMountRef.current.clientWidth || 320;
+      const newH = previewMountRef.current.clientHeight || 420;
+      camera.aspect = newW / newH;
+      camera.updateProjectionMatrix();
+      renderer.setSize(newW, newH);
+    };
+
+    window.addEventListener('resize', handleResize);
+
     return () => {
       cancelAnimationFrame(animId);
+      window.removeEventListener('resize', handleResize);
       renderer.dispose();
       if (renderer.domElement && renderer.domElement.parentNode) {
         renderer.domElement.parentNode.removeChild(renderer.domElement);
@@ -207,9 +241,9 @@ export const CustomizationModal: React.FC<CustomizationModalProps> = ({
         {/* Modal Body: 3D Viewport on Left, Control Options on Right */}
         <div className="flex-1 flex flex-col md:flex-row overflow-y-auto">
           {/* Left: 3D Interactive Turntable */}
-          <div className="w-full md:w-5/12 bg-slate-950/50 p-6 flex flex-col items-center justify-between border-b md:border-b-0 md:border-r border-slate-800">
+          <div className="w-full md:w-5/12 bg-slate-950/50 p-4 sm:p-6 flex flex-col items-center justify-between border-b md:border-b-0 md:border-r border-slate-800">
             {/* Gender Switcher */}
-            <div className="flex p-1 bg-slate-800/80 rounded-2xl border border-slate-700/60 w-full max-w-xs mb-4">
+            <div className="flex p-1 bg-slate-800/80 rounded-2xl border border-slate-700/60 w-full max-w-xs mb-3 sm:mb-4">
               <button
                 onClick={() => {
                   sound.playButtonClick();
@@ -241,16 +275,16 @@ export const CustomizationModal: React.FC<CustomizationModalProps> = ({
             {/* 3D Canvas Container */}
             <div
               ref={previewMountRef}
-              className="w-full h-72 sm:h-80 rounded-2xl overflow-hidden relative border border-slate-800 shadow-inner"
+              className="w-full h-60 sm:h-80 rounded-2xl overflow-hidden relative border border-slate-800 shadow-inner"
             />
 
-            <div className="text-[11px] text-slate-400 text-center mt-3">
+            <div className="text-[11px] text-slate-400 text-center mt-2 sm:mt-3">
               Realistic Human 3D Model • 12-Part Articulated Rig
             </div>
           </div>
 
           {/* Right: Customization Controls */}
-          <div className="w-full md:w-7/12 p-6 space-y-6 overflow-y-auto">
+          <div className="w-full md:w-7/12 p-4 sm:p-6 space-y-5 sm:space-y-6 overflow-y-auto">
             {/* Character & Player Names Section */}
             <div className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/80 space-y-3">
               <div className="flex items-center justify-between">

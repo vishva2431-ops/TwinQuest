@@ -72,6 +72,11 @@ export function createTwinQuestScene(container: HTMLDivElement, world: WorldData
   fillLight.position.set(-15, 10, -20);
   scene.add(fillLight);
 
+  // Player Character Frontal Fill Light (Keeps characters clear and vibrant)
+  const charFillLight = new THREE.DirectionalLight('#ffffff', 0.65);
+  charFillLight.position.set(0, 10, 15);
+  scene.add(charFillLight);
+
   // Procedural Sky Dome
   const skyGeo = new THREE.SphereGeometry(220, 24, 24);
   const skyMat = new THREE.MeshBasicMaterial({

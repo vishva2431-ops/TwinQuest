@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Users, UserPlus, MessageCircle, Send, ShieldCheck, UserX, Copy, Check, Sparkles, User, ArrowRight } from 'lucide-react';
+import { Users, UserPlus, MessageCircle, Send, ShieldCheck, UserX, Copy, Check, Sparkles, User, ArrowRight, Wifi, WifiOff } from 'lucide-react';
 import { storage } from '../services/storage';
 import { multiplayer } from '../services/multiplayer';
 import { sound } from '../services/sound';
 import { FriendItem, ChatMessage, PlayerProfile, CharacterGender } from '../types/game';
+import { useNetworkStatus } from '../services/networkStatus';
 
 interface FriendsPageProps {
   profile: PlayerProfile;
@@ -11,6 +12,7 @@ interface FriendsPageProps {
 }
 
 export const FriendsPage: React.FC<FriendsPageProps> = ({ profile, onJoinRoomWithFriend }) => {
+  const isOnline = useNetworkStatus();
   const [activeTab, setActiveTab] = useState<'friends' | 'add' | 'chat'>('friends');
   const [friends, setFriends] = useState<FriendItem[]>(storage.getFriends());
   const [selectedFriend, setSelectedFriend] = useState<FriendItem | null>(friends[0] || null);
@@ -118,13 +120,13 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ profile, onJoinRoomWit
         </div>
 
         {/* Tab Controls */}
-        <div className="flex p-1 bg-slate-900 border border-slate-800 rounded-2xl w-fit">
+        <div className="flex flex-wrap sm:flex-nowrap p-1 bg-slate-900 border border-slate-800 rounded-2xl w-full sm:w-fit gap-1 sm:gap-0">
           <button
             onClick={() => {
               sound.playButtonClick();
               setActiveTab('friends');
             }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeTab === 'friends' ? 'bg-rose-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -137,7 +139,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ profile, onJoinRoomWit
               sound.playButtonClick();
               setActiveTab('chat');
             }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeTab === 'chat' ? 'bg-rose-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -150,7 +152,7 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ profile, onJoinRoomWit
               sound.playButtonClick();
               setActiveTab('add');
             }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeTab === 'add' ? 'bg-rose-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
@@ -159,6 +161,20 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ profile, onJoinRoomWit
           </button>
         </div>
       </div>
+
+      {!isOnline && (
+        <div className="mb-6 p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 text-xs text-amber-200 flex items-center justify-between gap-4 shadow-lg animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <WifiOff className="w-5 h-5 text-amber-400 shrink-0" />
+            <div>
+              <div className="font-bold text-amber-300">Offline Mode Active</div>
+              <p className="text-slate-300 mt-0.5">
+                Connecting to friends and online room invites requires internet. You can still view saved friend progress, or play Single Player offline!
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TAB 1: Friends List */}
       {activeTab === 'friends' && (
@@ -293,9 +309,9 @@ export const FriendsPage: React.FC<FriendsPageProps> = ({ profile, onJoinRoomWit
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl min-h-[520px]">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl min-h-[460px] md:min-h-[520px]">
               {/* Friend Selector Sidebar */}
-              <div className="border-b md:border-b-0 md:border-r border-slate-800 p-4 space-y-2 overflow-y-auto">
+              <div className="border-b md:border-b-0 md:border-r border-slate-800 p-3 sm:p-4 space-y-2 overflow-y-auto max-h-48 md:max-h-none">
                 <div className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 mb-3">
                   Conversations
                 </div>
