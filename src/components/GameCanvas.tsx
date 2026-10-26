@@ -173,6 +173,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const room = multiplayer.getActiveRoom();
     const isHost = multiplayer.isCurrentHost();
 
+    // Which character THIS player controls in an online room (the guest may have been given the
+    // other character by the host, so read it from the room, not from the local profile).
+    const localGender: CharacterGender =
+      isOnlineRoom && room
+        ? room.player1?.id === profile.id
+          ? room.player1.character
+          : room.player2?.id === profile.id
+            ? room.player2.character
+            : activeGender
+        : activeGender;
+
     let boyRig: CharacterRig;
     let girlRig: CharacterRig;
 
@@ -209,6 +220,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     controller.singlePlayerCharacter = activeGender;
     controller.activeControlMode = isSinglePlayer ? 'single_switch' : isOnlineRoom ? 'online_room' : controlMode;
     controller.singleActivePlayer = activeGender;
+    controller.localCharacter = isOnlineRoom ? localGender : null;
     controllerRef.current = controller;
 
     // Start Ambient Music for World Mood
@@ -274,7 +286,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // Remote player position smoothing in online mode
       if (isOnlineRoom && remoteTargetPosRef.current) {
-        const isLocalBoy = activeGender === 'boy';
+        const isLocalBoy = localGender === 'boy';
         const remoteRig = isLocalBoy ? girlRig : boyRig;
         const remoteState = isLocalBoy ? controller.girlState : controller.boyState;
 
@@ -293,13 +305,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const now = performance.now();
         if (now - lastNetSendTimeRef.current > 55) {
           lastNetSendTimeRef.current = now;
-          const isLocalBoy = activeGender === 'boy';
+          const isLocalBoy = localGender === 'boy';
           const localState = isLocalBoy ? controller.boyState : controller.girlState;
           const localRig = isLocalBoy ? boyRig : girlRig;
 
           multiplayer.broadcastPlayerState({
             playerId: profile.id,
-            character: activeGender,
+            character: localGender,
             position: [localState.position.x, localState.position.y, localState.position.z],
             velocity: [localState.velocity.x, localState.velocity.y, localState.velocity.z],
             rotationY: localRig.group.rotation.y,
@@ -422,7 +434,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         targetFocus.copy(activeGender === 'boy' ? p1 : p2);
       } else if (isOnlineRoom) {
         // Online: camera tracks the local player
-        targetFocus.copy(activeGender === 'boy' ? p1 : p2);
+        targetFocus.copy(localGender === 'boy' ? p1 : p2);
       } else {
         // Local co-op: camera focuses on midpoint
         targetFocus.addVectors(p1, p2).multiplyScalar(0.5);
