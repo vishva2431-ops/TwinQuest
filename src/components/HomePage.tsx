@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { Play, Users, Sparkles, ShieldCheck, Heart, ArrowRight, Trophy, Mail, Wifi, WifiOff, Globe, Radio, CheckCircle2 } from 'lucide-react';
 import { PlayerProfile, WorldData } from '../types/game';
 import { WORLDS_DATA, storage } from '../services/storage';
-import { createCharacterRig, CharacterRig } from '../game/characterModel';
+import { CharacterRig } from '../game/characterModel';
+import { createCharacterRig } from '../game/glbCharacter';
 import { sound } from '../services/sound';
 import { useNetworkStatus } from '../services/networkStatus';
 

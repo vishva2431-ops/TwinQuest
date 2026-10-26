@@ -21,7 +21,8 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { createTwinQuestScene, buildStaticPlatforms } from '../game/threeScene';
-import { createCharacterRig, CharacterRig } from '../game/characterModel';
+import { CharacterRig } from '../game/characterModel';
+import { createCharacterRig } from '../game/glbCharacter';
 import { TrapManager } from '../game/trapSystem';
 import { GameController, InputState } from '../game/gameController';
 import { generateLevel } from '../services/levelGenerator';

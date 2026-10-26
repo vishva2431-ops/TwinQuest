@@ -1,5 +1,5 @@
 // TwinQuest Offline Service Worker
-const CACHE_NAME = 'twinquest-cache-v1';
+const CACHE_NAME = 'twinquest-cache-v2';
 const PRECACHE_URLS = [
   '/',
   '/index.html',

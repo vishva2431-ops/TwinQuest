@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Backups created by npm run optimize:models
+public/models/characters/*.original.glb

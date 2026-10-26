@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { X, Check, Sparkles, Shirt, Eye, Glasses, Backpack } from 'lucide-react';
 import { CharacterCustomization, CharacterGender, PlayerProfile } from '../types/game';
-import { createCharacterRig, CharacterRig } from '../game/characterModel';
+import { CharacterRig } from '../game/characterModel';
+import { createCharacterRig } from '../game/glbCharacter';
 import { sound } from '../services/sound';
 import { storage } from '../services/storage';
 

@@ -150,7 +150,8 @@ type PoseKey = keyof Pose;
 /* Character factory                                                           */
 /* -------------------------------------------------------------------------- */
 
-export function createCharacterRig(gender: CharacterGender, customization: CharacterCustomization): CharacterRig {
+/** Original code-built character. Used as the fallback by glbCharacter.ts (the GLB models). */
+export function createProceduralCharacterRig(gender: CharacterGender, customization: CharacterCustomization): CharacterRig {
   const root = new THREE.Group();
   root.name = gender === 'boy' ? 'Leo' : 'Maya';
   const materials: THREE.Material[] = [];
