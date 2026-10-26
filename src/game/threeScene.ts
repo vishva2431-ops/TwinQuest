@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { WorldData, PlatformConfig } from '../types/game';
 
 export interface SceneContext {
@@ -22,28 +23,136 @@ export interface SceneContext {
   updateTheme: (world: WorldData) => void;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Small shared helpers                                                        */
+/* -------------------------------------------------------------------------- */
+
+const isMobileDevice = (): boolean => {
+  if (typeof navigator === 'undefined') return false;
+  const coarse = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && coarse);
+};
+
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const hash3 = (x: number, y: number, z: number) => {
+  const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453;
+  return s - Math.floor(s);
+};
+
+/** Collects instance transforms and builds one InstancedMesh (one draw call). */
+class InstanceList {
+  private items: Array<{ p: THREE.Vector3; q: THREE.Quaternion; s: THREE.Vector3; c?: THREE.Color }> = [];
+  add(p: THREE.Vector3, euler: THREE.Euler, s: THREE.Vector3 | number, c?: THREE.ColorRepresentation) {
+    this.items.push({
+      p,
+      q: new THREE.Quaternion().setFromEuler(euler),
+      s: typeof s === 'number' ? new THREE.Vector3(s, s, s) : s,
+      c: c !== undefined ? new THREE.Color(c) : undefined
+    });
+  }
+  get count() {
+    return this.items.length;
+  }
+  build(geo: THREE.BufferGeometry, mat: THREE.Material, cast = false): THREE.InstancedMesh | null {
+    if (!this.items.length) return null;
+    const mesh = new THREE.InstancedMesh(geo, mat, this.items.length);
+    const m = new THREE.Matrix4();
+    this.items.forEach((it, i) => {
+      m.compose(it.p, it.q, it.s);
+      mesh.setMatrixAt(i, m);
+      if (it.c) mesh.setColorAt(i, it.c);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.frustumCulled = false;
+    mesh.castShadow = cast;
+    return mesh;
+  }
+}
+
+function makeSoftDotTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeWaterfallTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 128;
+  const g = c.getContext('2d')!;
+  g.fillStyle = 'rgba(147,197,253,0.55)';
+  g.fillRect(0, 0, 64, 128);
+  const rng = mulberry32(99);
+  for (let i = 0; i < 26; i++) {
+    const x = rng() * 64;
+    const y = rng() * 128;
+    g.fillStyle = `rgba(255,255,255,${0.25 + rng() * 0.45})`;
+    g.fillRect(x, y, 1.5 + rng() * 2.5, 14 + rng() * 40);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function paintSky(geo: THREE.SphereGeometry, bottom: THREE.Color, top: THREE.Color, radius: number) {
+  const pos = geo.attributes.position;
+  let colors = geo.getAttribute('color') as THREE.BufferAttribute | undefined;
+  if (!colors) {
+    colors = new THREE.BufferAttribute(new Float32Array(pos.count * 3), 3);
+    geo.setAttribute('color', colors);
+  }
+  const horizon = bottom.clone().lerp(new THREE.Color('#fde7f3'), 0.4);
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const h = pos.getY(i) / radius;
+    if (h < 0) c.copy(horizon).lerp(bottom, THREE.MathUtils.clamp(-h * 2, 0, 1));
+    else c.copy(horizon).lerp(top, Math.pow(THREE.MathUtils.clamp(h * 1.6, 0, 1), 0.7));
+    colors.setXYZ(i, c.r, c.g, c.b);
+  }
+  colors.needsUpdate = true;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Scene                                                                       */
+/* -------------------------------------------------------------------------- */
+
 /**
- * Creates the magical fantasy 3D environment for TwinQuest
- * Faithfully recreating the official TwinQuest artwork:
- * - Rich blue skies with fluffy white 3D cartoon clouds
- * - Lush floating grass islands with layered earthen rock crags underneath
- * - Fairytale castle landmark with tall spires, purple flags, and glowing windows
- * - Grand Glowing Heart Portal with layered magenta/purple heart energy
- * - Swirling Golden Magical Trails inspired by the logo's golden energy rings
+ * Creates the TwinQuest fantasy environment: gradient sky with sun glow, layered mountains,
+ * soft clouds, distant floating islands with waterfalls, a fairytale castle, drifting sparkles
+ * and the glowing heart portal. Public contract (SceneContext) is unchanged.
  */
 export function createTwinQuestScene(container: HTMLDivElement, world: WorldData): SceneContext {
   const width = container.clientWidth || window.innerWidth;
   const height = container.clientHeight || window.innerHeight;
+  const mobile = isMobileDevice();
 
   const scene = new THREE.Scene();
-  // Atmospheric fantasy fog with magical tint
-  scene.fog = new THREE.FogExp2('#c7d2fe', 0.009);
+  const fog = new THREE.FogExp2(world.fogColor || '#c7d2fe', 0.009);
+  scene.fog = fog;
 
-  // Perspective Camera
   const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 400);
   camera.position.set(0, 7, 12);
 
-  // WebGL Renderer with High-Fidelity PBR Tone Mapping
   const isHeadless = navigator.webdriver || /HeadlessChrome/i.test(navigator.userAgent);
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
@@ -51,26 +160,23 @@ export function createTwinQuestScene(container: HTMLDivElement, world: WorldData
     alpha: false
   });
   renderer.setSize(width, height);
-  renderer.setPixelRatio(isHeadless ? 1 : Math.min(window.devicePixelRatio, 1.5));
+  renderer.setPixelRatio(isHeadless ? 1 : Math.min(window.devicePixelRatio, mobile ? 1.25 : 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.18;
+  renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = !isHeadless;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
+  renderer.shadowMap.type = mobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   container.appendChild(renderer.domElement);
 
-  // --- Lighting Rig (Studio Pixar / Anime Fantasy Lighting) ---
-  // Warm sky hemisphere light
-  const ambientLight = new THREE.HemisphereLight('#bae6fd', '#3b82f6', 1.1);
+  /* ------------------------------ lighting -------------------------------- */
+  const ambientLight = new THREE.HemisphereLight('#bae6fd', '#6d7bd8', 0.95);
   scene.add(ambientLight);
 
-  // Bright warm sunlight (casting soft shadows)
-  const sunLight = new THREE.DirectionalLight('#fffbeb', 2.2);
+  const sunLight = new THREE.DirectionalLight('#fff3d6', 2.0);
   sunLight.position.set(22, 38, 18);
   sunLight.castShadow = !isHeadless;
-  sunLight.shadow.mapSize.width = 1024;
-  sunLight.shadow.mapSize.height = 1024;
+  const shadowSize = mobile ? 1024 : 2048;
+  sunLight.shadow.mapSize.set(shadowSize, shadowSize);
   sunLight.shadow.camera.near = 0.5;
   sunLight.shadow.camera.far = 120;
   const d = 35;
@@ -82,41 +188,47 @@ export function createTwinQuestScene(container: HTMLDivElement, world: WorldData
   sunLight.shadow.normalBias = 0.02;
   scene.add(sunLight);
 
-  // Soft sky blue fill light (fills dark shadows)
-  const fillLight = new THREE.DirectionalLight('#93c5fd', 0.8);
+  // Cool sky fill that also gives a soft violet rim from behind
+  const fillLight = new THREE.DirectionalLight('#a5b4fc', 0.7);
   fillLight.position.set(-18, 12, -15);
   scene.add(fillLight);
 
-  // Character Frontal Fill Light (attached to camera so characters are always brilliantly lit across all islands)
-  const charFillLight = new THREE.DirectionalLight('#ffffff', 0.85);
+  // Frontal fill attached to the camera so both characters stay readable on every island
+  const charFillLight = new THREE.DirectionalLight('#ffffff', 0.8);
   charFillLight.position.set(0, 3, 6);
   camera.add(charFillLight);
   scene.add(camera);
 
-  // Warm Golden Rim Light
-  const rimLight = new THREE.DirectionalLight('#fde047', 0.6);
-  rimLight.position.set(0, 15, -25);
-  scene.add(rimLight);
-
-  // --- 1. Rich Blue Sky Dome with Horizon Gradient ---
-  const skyGeo = new THREE.SphereGeometry(260, 32, 32);
-  const skyMat = new THREE.MeshBasicMaterial({
-    color: '#38bdf8',
-    side: THREE.BackSide
-  });
+  /* ------------------------------ sky + sun -------------------------------- */
+  const SKY_R = 260;
+  const skyGeo = new THREE.SphereGeometry(SKY_R, 32, 24);
+  const skyBottom = new THREE.Color(world.skyColorBottom || '#bae6fd');
+  const skyTop = new THREE.Color(world.skyColorTop || '#38bdf8');
+  paintSky(skyGeo, skyBottom, skyTop, SKY_R);
+  const skyMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false });
   const skyMesh = new THREE.Mesh(skyGeo, skyMat);
   scene.add(skyMesh);
 
-  // --- 2. Fluffy White 3D Cartoon Clouds ---
+  const dotTex = makeSoftDotTexture();
+  const sun = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: dotTex, color: '#fff1c2', transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false, fog: false
+    })
+  );
+  sun.position.copy(sunLight.position).normalize().multiplyScalar(235);
+  sun.scale.setScalar(95);
+  scene.add(sun);
+
+  /* ------------------------------ mountains -------------------------------- */
+  scene.add(createMountains());
+
+  /* ------------------------------ clouds ----------------------------------- */
   const cloudsGroup = new THREE.Group();
   const cloudMat = new THREE.MeshStandardMaterial({
-    color: '#ffffff',
-    roughness: 0.95,
-    metalness: 0.05,
-    emissive: '#f0fdf4',
-    emissiveIntensity: 0.12
+    color: '#ffffff', roughness: 0.95, metalness: 0, emissive: '#fdf2f8', emissiveIntensity: 0.14
   });
-
+  const cloudSphere = new THREE.SphereGeometry(1, 14, 10);
   const cloudConfigs = [
     { x: -35, y: 14, z: -55, scale: 1.4 },
     { x: 38, y: 18, z: -65, scale: 1.6 },
@@ -124,88 +236,75 @@ export function createTwinQuestScene(container: HTMLDivElement, world: WorldData
     { x: 20, y: 26, z: -95, scale: 1.8 },
     { x: -45, y: 8, z: -35, scale: 1.2 },
     { x: 42, y: 10, z: -40, scale: 1.3 },
-    { x: 0, y: -6, z: -45, scale: 2.2 }, // Sea of clouds beneath islands
+    { x: 0, y: -6, z: -45, scale: 2.2 },
     { x: -30, y: -8, z: -60, scale: 2.5 },
     { x: 32, y: -7, z: -55, scale: 2.4 }
   ];
-
   cloudConfigs.forEach((c) => {
-    const cloud = createPuffyCloud(cloudMat, c.scale);
+    const cloud = createPuffyCloud(cloudMat, cloudSphere, c.scale);
     cloud.position.set(c.x, c.y, c.z);
     cloudsGroup.add(cloud);
   });
   scene.add(cloudsGroup);
 
-  // --- 3. Fairytale Castle Landmark (Directly from Twin-Quest.png) ---
+  /* ------------------------------ castle ----------------------------------- */
   const castleGroup = createFairytaleCastle();
   castleGroup.position.set(0, 6, -72);
   scene.add(castleGroup);
 
-  // --- 4. Distant Floating Islands with Trees & Crystals ---
-  const distantIslands = new THREE.Group();
-  for (let i = 0; i < 9; i++) {
-    const angle = (i / 9) * Math.PI * 2;
-    const dist = 65 + Math.random() * 35;
-    const islandX = Math.cos(angle) * dist;
-    const islandZ = Math.sin(angle) * dist - 35;
-    const islandY = -4 + Math.random() * 18;
-
-    const island = createMiniFloatingIsland(8 + Math.random() * 6);
-    island.position.set(islandX, islandY, islandZ);
-    distantIslands.add(island);
-  }
+  /* ------------------------------ distant islands -------------------------- */
+  const distantIslands = createDistantIslands();
   scene.add(distantIslands);
 
-  // --- 5. Magical Ambient Sparkles & Petals ---
+  /* ------------------------------ sparkles --------------------------------- */
   const particleCount = 220;
   const particleGeo = new THREE.BufferGeometry();
   const particlePositions = new Float32Array(particleCount * 3);
-
-  for (let i = 0; i < particleCount * 3; i += 3) {
-    particlePositions[i] = (Math.random() - 0.5) * 70;
-    particlePositions[i + 1] = Math.random() * 30 - 5;
-    particlePositions[i + 2] = -Math.random() * 90;
+  const particleColors = new Float32Array(particleCount * 3);
+  const palette = [new THREE.Color('#fbbf24'), new THREE.Color('#f9a8d4'), new THREE.Color('#ffffff'), new THREE.Color('#c4b5fd')];
+  const prng = mulberry32(2024);
+  for (let i = 0; i < particleCount; i++) {
+    particlePositions[i * 3] = (prng() - 0.5) * 70;
+    particlePositions[i * 3 + 1] = prng() * 30 - 5;
+    particlePositions[i * 3 + 2] = -prng() * 90;
+    const col = palette[Math.floor(prng() * palette.length)];
+    particleColors.set([col.r, col.g, col.b], i * 3);
   }
   particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-
+  particleGeo.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
   const particleMat = new THREE.PointsMaterial({
-    color: '#fbbf24',
-    size: 0.45,
-    transparent: true,
-    opacity: 0.85,
-    blending: THREE.AdditiveBlending
+    color: '#ffffff', size: 0.6, map: dotTex, vertexColors: true, transparent: true, opacity: 0.85,
+    blending: THREE.AdditiveBlending, depthWrite: false
   });
   const particles = new THREE.Points(particleGeo, particleMat);
+  particles.frustumCulled = false;
   scene.add(particles);
 
-  // --- 6. Official Glowing Heart Portal (From Twin-Quest.png) ---
-  const { portalGroup, goldenTrails } = createOfficialHeartPortal();
+  /* ------------------------------ portal ----------------------------------- */
+  const { portalGroup, goldenTrails } = createOfficialHeartPortal(dotTex);
   const goalPortal = portalGroup;
   const goldenTrailsGroup = goldenTrails;
   scene.add(goalPortal);
 
-  // --- 7. Romantic Love Tether ---
-  const tetherGeo = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0, 1, 0),
-    new THREE.Vector3(0, 1, 0)
-  ]);
-  const loveTetherMaterial = new THREE.LineBasicMaterial({
-    color: '#f43f5e',
-    transparent: true,
-    opacity: 0.5,
-    linewidth: 2
-  });
+  /* ------------------------------ love tether ------------------------------ */
+  const tetherGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 1, 0)]);
+  const loveTetherMaterial = new THREE.LineBasicMaterial({ color: '#fb7185', transparent: true, opacity: 0.55 });
   const loveTetherMesh = new THREE.Line(tetherGeo, loveTetherMaterial);
   scene.add(loveTetherMesh);
 
   const platformMeshes: THREE.Object3D[] = [];
 
   const updateTheme = (newWorld: WorldData) => {
-    scene.fog = new THREE.FogExp2(newWorld.fogColor || '#c7d2fe', 0.009);
+    fog.color.set(newWorld.fogColor || '#c7d2fe');
     ambientLight.color.set(newWorld.skyColorBottom || '#bae6fd');
-    fillLight.color.set(newWorld.accentColor || '#93c5fd');
-    skyMat.color.set(newWorld.skyColorTop || '#38bdf8');
-    particleMat.color.set('#fbbf24');
+    fillLight.color.set(newWorld.accentColor || '#a5b4fc');
+    paintSky(
+      skyGeo,
+      new THREE.Color(newWorld.skyColorBottom || '#bae6fd'),
+      new THREE.Color(newWorld.skyColorTop || '#38bdf8'),
+      SKY_R
+    );
+    particleMat.color.set('#ffffff');
   };
 
   const onWindowResize = () => {
@@ -216,11 +315,18 @@ export function createTwinQuestScene(container: HTMLDivElement, world: WorldData
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
   };
-
   window.addEventListener('resize', onWindowResize);
 
   const dispose = () => {
     window.removeEventListener('resize', onWindowResize);
+    scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+      const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+      else mat?.dispose();
+    });
+    dotTex.dispose();
     renderer.dispose();
     if (renderer.domElement && renderer.domElement.parentNode) {
       renderer.domElement.parentNode.removeChild(renderer.domElement);
@@ -228,226 +334,369 @@ export function createTwinQuestScene(container: HTMLDivElement, world: WorldData
   };
 
   return {
-    scene,
-    camera,
-    renderer,
-    ambientLight,
-    sunLight,
-    charFillLight,
-    particles,
-    goalPortal,
-    loveTetherMesh,
-    loveTetherMaterial,
-    platformMeshes,
-    skyMesh,
-    distantIslands,
-    castleGroup,
-    cloudsGroup,
-    goldenTrailsGroup,
-    dispose,
-    updateTheme
+    scene, camera, renderer, ambientLight, sunLight, charFillLight, particles, goalPortal,
+    loveTetherMesh, loveTetherMaterial, platformMeshes, skyMesh, distantIslands, castleGroup,
+    cloudsGroup, goldenTrailsGroup, dispose, updateTheme
   };
 }
 
+/* -------------------------------------------------------------------------- */
+/* Biomes + level platforms                                                    */
+/* -------------------------------------------------------------------------- */
+
+export type Biome = 'meadow' | 'autumn' | 'crystal' | 'blossom';
+
+interface BiomePalette {
+  grass: string; tuft: string; rock: string; bush: string; trim: string;
+  flowers: string[]; crystals: string[];
+}
+
+const BIOMES: Record<Biome, BiomePalette> = {
+  meadow: {
+    grass: '#3fcf5f', tuft: '#22a84a', rock: '#7a5233', bush: '#1f9d4a', trim: '#fecdd3',
+    flowers: ['#f43f5e', '#ec4899', '#fde047', '#ffffff', '#60a5fa'], crystals: ['#f472b6', '#a78bfa']
+  },
+  autumn: {
+    grass: '#d9a441', tuft: '#b9731f', rock: '#6b3f2a', bush: '#b45309', trim: '#fed7aa',
+    flowers: ['#fb923c', '#fde047', '#ef4444', '#fff7ed'], crystals: ['#fb923c', '#fbbf24']
+  },
+  crystal: {
+    grass: '#2dd4bf', tuft: '#0f9d8e', rock: '#5b5a96', bush: '#0d9488', trim: '#a5f3fc',
+    flowers: ['#67e8f9', '#c4b5fd', '#f0abfc', '#ffffff'], crystals: ['#22d3ee', '#a78bfa', '#f0abfc']
+  },
+  blossom: {
+    grass: '#7fdc8a', tuft: '#4cb86a', rock: '#855766', bush: '#f472b6', trim: '#fbcfe8',
+    flowers: ['#f9a8d4', '#fbcfe8', '#ffffff', '#f472b6'], crystals: ['#f472b6', '#fb7185']
+  }
+};
+
 /**
- * Builds stylized 3D floating grass islands for each level platform.
- * Aligns the top grass surface precisely with the platform's bounding box top
- * to preserve 100% accurate collision detection and responsive jumping!
+ * Picks a biome from a world's ground colour so levels look different without changing level data.
+ * Pass an explicit biome to buildStaticPlatforms to override.
+ */
+export function biomeFromColor(hex: string): Biome {
+  const hsl = { h: 0, s: 0, l: 0 };
+  new THREE.Color(hex || '#22c55e').getHSL(hsl);
+  const h = hsl.h * 360;
+  if (hsl.s < 0.12) return 'meadow';
+  if (h >= 15 && h < 70) return 'autumn';
+  if (h >= 170 && h < 280) return 'crystal';
+  if (h >= 280 || h < 15) return 'blossom';
+  return 'meadow';
+}
+
+interface BiomeKit {
+  grassMat: THREE.MeshStandardMaterial;
+  rockMat: THREE.MeshStandardMaterial;
+  tuftMat: THREE.MeshStandardMaterial;
+  bushMat: THREE.MeshStandardMaterial;
+}
+
+const kitCache = new Map<Biome, BiomeKit>();
+const capCache = new Map<string, THREE.BufferGeometry>();
+const frameCache = new Map<string, THREE.BufferGeometry>();
+
+const sharedGeo = {
+  rock: null as THREE.BufferGeometry | null,
+  tuft: null as THREE.BufferGeometry | null,
+  stem: null as THREE.BufferGeometry | null,
+  flower: null as THREE.BufferGeometry | null,
+  crystal: null as THREE.BufferGeometry | null,
+  bush: null as THREE.BufferGeometry | null,
+  plank: null as THREE.BufferGeometry | null,
+  post: null as THREE.BufferGeometry | null
+};
+
+const sharedMats = {
+  flower: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.35, emissive: '#ffffff', emissiveIntensity: 0.18 }),
+  stem: new THREE.MeshStandardMaterial({ color: '#16a34a', roughness: 0.7 }),
+  crystal: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.12, metalness: 0.1, emissive: '#ffffff', emissiveIntensity: 0.4 }),
+  wood: new THREE.MeshStandardMaterial({ color: '#92400e', roughness: 0.75 }),
+  woodDark: new THREE.MeshStandardMaterial({ color: '#6b2f0b', roughness: 0.8 }),
+  trim: new THREE.MeshBasicMaterial({
+    color: '#fecdd3', transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false
+  })
+};
+
+function getGeometries() {
+  if (!sharedGeo.rock) {
+    // Layered, faceted crag: unit lathe (radius 1, depth 1) with strata colours and deterministic jitter
+    const profile = [[1, 0], [0.97, -0.12], [0.84, -0.3], [0.7, -0.5], [0.52, -0.7], [0.3, -0.88], [0.1, -1.0], [0, -1.04]];
+    const rock = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 9);
+    const pos = rock.attributes.position;
+    const colors = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      let x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const k = y > -0.02 ? 0 : 1; // keep the rim stable so it tucks under the grass
+      const hx = hash3(Math.round(x * 100), Math.round(y * 100), Math.round(z * 100));
+      const hz = hash3(Math.round(z * 100), Math.round(y * 100), Math.round(x * 100));
+      x += (hx - 0.5) * 0.14 * k;
+      z += (hz - 0.5) * 0.14 * k;
+      y += (hx - 0.5) * 0.06 * k;
+      pos.setXYZ(i, x, y, z);
+      const band = Math.floor(-y * 6) % 2 === 0 ? 1.0 : 0.82;
+      colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = band;
+    }
+    rock.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    sharedGeo.rock = rock;
+
+    const tuft = new THREE.ConeGeometry(0.07, 0.28, 4);
+    tuft.translate(0, 0.14, 0);
+    sharedGeo.tuft = tuft;
+    const stem = new THREE.CylinderGeometry(0.012, 0.014, 0.2, 4);
+    stem.translate(0, 0.1, 0);
+    sharedGeo.stem = stem;
+    sharedGeo.flower = new THREE.SphereGeometry(0.085, 8, 6);
+    const crystal = new THREE.ConeGeometry(0.12, 0.55, 5);
+    crystal.translate(0, 0.275, 0);
+    sharedGeo.crystal = crystal;
+    const bush = new THREE.SphereGeometry(0.4, 10, 8);
+    bush.scale(1.2, 0.7, 1.0);
+    sharedGeo.bush = bush;
+    sharedGeo.plank = new THREE.BoxGeometry(1, 1, 1);
+    sharedGeo.post = new THREE.CylinderGeometry(0.05, 0.06, 0.65, 8);
+  }
+  return sharedGeo as { [K in keyof typeof sharedGeo]: THREE.BufferGeometry };
+}
+
+function getBiomeKit(biome: Biome): BiomeKit {
+  let kit = kitCache.get(biome);
+  if (!kit) {
+    const p = BIOMES[biome];
+    kit = {
+      grassMat: new THREE.MeshStandardMaterial({ color: p.grass, roughness: 0.6, metalness: 0 }),
+      rockMat: new THREE.MeshStandardMaterial({ color: p.rock, roughness: 0.9, metalness: 0.02, flatShading: true, vertexColors: true }),
+      tuftMat: new THREE.MeshStandardMaterial({ color: p.tuft, roughness: 0.7, side: THREE.DoubleSide }),
+      bushMat: new THREE.MeshStandardMaterial({ color: p.bush, roughness: 0.75 })
+    };
+    kitCache.set(biome, kit);
+  }
+  return kit;
+}
+
+function getCapGeometry(w: number, h: number, d: number): THREE.BufferGeometry {
+  const key = `${w.toFixed(2)}|${h.toFixed(2)}|${d.toFixed(2)}`;
+  let g = capCache.get(key);
+  if (!g) {
+    g = new RoundedBoxGeometry(w, h, d, 2, Math.min(0.14, h * 0.4, w * 0.3, d * 0.3));
+    capCache.set(key, g);
+  }
+  return g;
+}
+
+/** Flat glowing outline that marks a platform as safe, walkable ground. */
+function getFrameGeometry(w: number, d: number): THREE.BufferGeometry {
+  const key = `${w.toFixed(2)}|${d.toFixed(2)}`;
+  let g = frameCache.get(key);
+  if (!g) {
+    const ow = w * 0.5 - 0.06, od = d * 0.5 - 0.06;
+    const iw = ow - 0.09, id = od - 0.09;
+    const shape = new THREE.Shape();
+    shape.moveTo(-ow, -od); shape.lineTo(ow, -od); shape.lineTo(ow, od); shape.lineTo(-ow, od); shape.lineTo(-ow, -od);
+    const hole = new THREE.Path();
+    hole.moveTo(-iw, -id); hole.lineTo(-iw, id); hole.lineTo(iw, id); hole.lineTo(iw, -id); hole.lineTo(-iw, -id);
+    shape.holes.push(hole);
+    g = new THREE.ShapeGeometry(shape);
+    g.rotateX(-Math.PI / 2);
+    frameCache.set(key, g);
+  }
+  return g;
+}
+
+function disposeInstances(obj: THREE.Object3D) {
+  obj.traverse((o) => {
+    if ((o as THREE.InstancedMesh).isInstancedMesh) (o as THREE.InstancedMesh).dispose();
+  });
+}
+
+/**
+ * Builds stylized floating islands and bridges for each static platform.
+ * The visual top surface is exactly platform.position.y + size.y / 2, so collision is unchanged.
+ * Foliage, flowers, crystals and bushes for the whole level are batched into a few InstancedMeshes.
  */
 export function buildStaticPlatforms(
   scene: THREE.Scene,
   platforms: PlatformConfig[],
   groundColor: string,
-  existingList: THREE.Object3D[]
+  existingList: THREE.Object3D[],
+  biomeHint?: Biome
 ): THREE.Object3D[] {
-  // Clear existing
-  existingList.forEach((m) => scene.remove(m));
+  existingList.forEach((m) => {
+    scene.remove(m);
+    disposeInstances(m);
+  });
   const newList: THREE.Object3D[] = [];
 
-  const grassMat = new THREE.MeshStandardMaterial({
-    color: '#22c55e', // Vibrant lush green from Twin-Quest.png
-    roughness: 0.55,
-    metalness: 0.05
-  });
+  const biome = biomeHint ?? biomeFromColor(groundColor);
+  const palette = BIOMES[biome];
+  const kit = getBiomeKit(biome);
+  const geo = getGeometries();
+  sharedMats.trim.color.set(palette.trim);
 
-  const rockMat = new THREE.MeshStandardMaterial({
-    color: '#5c3a21', // Layered earthen rock
-    roughness: 0.85,
-    metalness: 0.08
-  });
-
-  const rockDarkMat = new THREE.MeshStandardMaterial({
-    color: '#3d2413',
-    roughness: 0.9,
-    metalness: 0.05
-  });
-
-  const woodMat = new THREE.MeshStandardMaterial({
-    color: '#92400e',
-    roughness: 0.7,
-    metalness: 0.1
-  });
-
-  const flowerColors = ['#f43f5e', '#ec4899', '#fde047', '#ffffff', '#60a5fa'];
+  const tufts = new InstanceList();
+  const flowers = new InstanceList();
+  const stems = new InstanceList();
+  const crystals = new InstanceList();
+  const bushes = new InstanceList();
+  const foliage = new THREE.Group();
+  foliage.name = 'levelFoliage';
 
   platforms.forEach((p, pIndex) => {
-    if (!p.isMoving) {
-      const [w, h, d] = p.size;
-      const [px, py, pz] = p.position;
+    if (p.isMoving) return;
+    const [w, h, d] = p.size;
+    const [px, py, pz] = p.position;
+    const rng = mulberry32(pIndex * 7919 + Math.round(px * 13 + pz * 31));
+    const top = py + h * 0.5;
 
-      const islandGroup = new THREE.Group();
-      islandGroup.position.set(px, py, pz);
+    const group = new THREE.Group();
+    group.position.set(px, py, pz);
 
-      const isBridge = (w < 2.2 && d >= 4) || (d < 2.2 && w >= 4);
+    const isBridge = (w < 2.2 && d >= 4) || (d < 2.2 && w >= 4);
 
-      if (isBridge) {
-        // --- Stylized Wooden Rope Bridge ---
-        const plankCount = Math.floor(Math.max(w, d) / 0.6);
-        const isAlongZ = d >= w;
-
-        for (let i = 0; i < plankCount; i++) {
-          const plankGeo = new THREE.BoxGeometry(
-            isAlongZ ? w * 0.95 : 0.45,
-            0.14,
-            isAlongZ ? 0.45 : d * 0.95
-          );
-          const plank = new THREE.Mesh(plankGeo, woodMat);
-          const offset = (i - (plankCount - 1) / 2) * 0.58;
-          plank.position.set(isAlongZ ? 0 : offset, h * 0.5 - 0.07, isAlongZ ? offset : 0);
-          plank.castShadow = true;
-          plank.receiveShadow = true;
-          islandGroup.add(plank);
-        }
-
-        // Rope Railings
-        [-1, 1].forEach((side) => {
-          const ropeGeo = new THREE.CylinderGeometry(0.04, 0.04, isAlongZ ? d : w, 8);
-          const rope = new THREE.Mesh(ropeGeo, woodMat);
-          rope.position.set(
-            isAlongZ ? side * (w * 0.48) : 0,
-            h * 0.5 + 0.35,
-            isAlongZ ? 0 : side * (d * 0.48)
-          );
-          if (isAlongZ) rope.rotation.x = Math.PI / 2;
-          else rope.rotation.z = Math.PI / 2;
-          islandGroup.add(rope);
-
-          // Posts
-          for (let pi = 0; pi < 3; pi++) {
-            const postGeo = new THREE.CylinderGeometry(0.05, 0.06, 0.65, 8);
-            const post = new THREE.Mesh(postGeo, woodMat);
-            const poffset = (pi - 1) * (isAlongZ ? d * 0.4 : w * 0.4);
-            post.position.set(
-              isAlongZ ? side * (w * 0.48) : poffset,
-              h * 0.5 + 0.15,
-              isAlongZ ? poffset : side * (d * 0.48)
-            );
-            islandGroup.add(post);
-          }
-        });
-      } else {
-        // --- Lush Floating Grass Island with Tapered Earthen Rock Base ---
-        // 1. Lush Green Grass Cap (Top aligns precisely with py + h*0.5)
-        const grassH = Math.min(0.45, h * 0.6);
-        const grassGeo = new THREE.BoxGeometry(w, grassH, d);
-        const grassMesh = new THREE.Mesh(grassGeo, grassMat);
-        grassMesh.position.y = h * 0.5 - grassH * 0.5;
-        grassMesh.castShadow = true;
-        grassMesh.receiveShadow = true;
-        islandGroup.add(grassMesh);
-
-        // Hanging Grass Overhang Clumps
-        const clumpCount = Math.min(8, Math.floor((w + d) * 0.7));
-        for (let c = 0; c < clumpCount; c++) {
-          const clumpW = 0.4 + (c % 3) * 0.2;
-          const clumpH = 0.25 + (c % 2) * 0.15;
-          const clumpGeo = new THREE.ConeGeometry(clumpW * 0.5, clumpH, 5);
-          const clump = new THREE.Mesh(clumpGeo, grassMat);
-          clump.rotation.x = Math.PI;
-
-          // Place along perimeter
-          const isXSide = c % 2 === 0;
-          const sign = c % 4 < 2 ? 1 : -1;
-          const cx = isXSide ? sign * (w * 0.5) : ((c / clumpCount) - 0.5) * w * 0.8;
-          const cz = isXSide ? ((c / clumpCount) - 0.5) * d * 0.8 : sign * (d * 0.5);
-          clump.position.set(cx, h * 0.5 - grassH - clumpH * 0.4, cz);
-          islandGroup.add(clump);
-        }
-
-        // 2. Layered Earthen Rock Underbody (Tapered Crag)
-        const rockH = Math.max(1.8, Math.min(w, d) * 0.85);
-        const rockTopW = w * 0.94;
-        const rockTopD = d * 0.94;
-        const rockBotW = w * 0.35;
-        const rockBotD = d * 0.35;
-
-        // Inverted pyramidal rock base
-        const rockGeo = new THREE.CylinderGeometry(
-          Math.min(rockTopW, rockTopD) * 0.5,
-          Math.min(rockBotW, rockBotD) * 0.5,
-          rockH,
-          7
+    if (isBridge) {
+      const isAlongZ = d >= w;
+      const length = isAlongZ ? d : w;
+      const width = isAlongZ ? w : d;
+      const plankCount = Math.floor(length / 0.6);
+      const planks = new InstanceList();
+      for (let i = 0; i < plankCount; i++) {
+        const off = (i - (plankCount - 1) / 2) * 0.58;
+        planks.add(
+          new THREE.Vector3(isAlongZ ? 0 : off, h * 0.5 - 0.07, isAlongZ ? off : 0),
+          new THREE.Euler(0, 0, (rng() - 0.5) * 0.02),
+          new THREE.Vector3(isAlongZ ? width * 0.95 : 0.45, 0.14, isAlongZ ? 0.45 : width * 0.95)
         );
-        const rockMesh = new THREE.Mesh(rockGeo, (pIndex % 2 === 0) ? rockMat : rockDarkMat);
-        rockMesh.position.y = h * 0.5 - grassH - rockH * 0.5;
-        rockMesh.scale.set(rockTopW / Math.min(rockTopW, rockTopD), 1, rockTopD / Math.min(rockTopW, rockTopD));
-        rockMesh.castShadow = true;
-        rockMesh.receiveShadow = true;
-        islandGroup.add(rockMesh);
+      }
+      const plankMesh = planks.build(geo.plank, sharedMats.wood, true);
+      if (plankMesh) {
+        plankMesh.receiveShadow = true;
+        group.add(plankMesh);
+      }
+      const posts = new InstanceList();
+      [-1, 1].forEach((side) => {
+        const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, length, 6), sharedMats.woodDark);
+        rope.position.set(isAlongZ ? side * width * 0.48 : 0, h * 0.5 + 0.35, isAlongZ ? 0 : side * width * 0.48);
+        if (isAlongZ) rope.rotation.x = Math.PI / 2;
+        else rope.rotation.z = Math.PI / 2;
+        group.add(rope);
+        for (let pi = 0; pi < 3; pi++) {
+          const o = (pi - 1) * length * 0.4;
+          posts.add(
+            new THREE.Vector3(isAlongZ ? side * width * 0.48 : o, h * 0.5 + 0.15, isAlongZ ? o : side * width * 0.48),
+            new THREE.Euler(), 1
+          );
+        }
+      });
+      const postMesh = posts.build(geo.post, sharedMats.wood, true);
+      if (postMesh) group.add(postMesh);
+    } else {
+      // Grass cap
+      const grassH = Math.min(0.45, h * 0.6);
+      const cap = new THREE.Mesh(getCapGeometry(w, grassH, d), kit.grassMat);
+      cap.position.y = h * 0.5 - grassH * 0.5;
+      cap.castShadow = true;
+      cap.receiveShadow = true;
+      group.add(cap);
 
-        // Lower Jagged Stalactite Tip
-        const tipGeo = new THREE.ConeGeometry(Math.min(rockBotW, rockBotD) * 0.45, rockH * 0.6, 6);
-        const tip = new THREE.Mesh(tipGeo, rockDarkMat);
-        tip.rotation.x = Math.PI;
-        tip.position.y = h * 0.5 - grassH - rockH - (rockH * 0.6) * 0.45;
-        islandGroup.add(tip);
+      // Layered rock underbody
+      const rockH = Math.min(6, Math.max(1.8, Math.min(w, d) * 0.85));
+      const rock = new THREE.Mesh(geo.rock, kit.rockMat);
+      rock.position.y = h * 0.5 - grassH + 0.02;
+      rock.scale.set(w * 0.5 * 1.04, rockH, d * 0.5 * 1.04);
+      rock.rotation.y = rng() * Math.PI;
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      group.add(rock);
 
-        // 3. Environmental Foliage: Flowers & Cute Shrub Mounds
-        if (w >= 2.5 && d >= 2.5) {
-          // Shrub Mound
-          const bushGeo = new THREE.SphereGeometry(0.35, 8, 8);
-          bushGeo.scale(1.2, 0.7, 1.0);
-          const bushMat = new THREE.MeshStandardMaterial({ color: '#15803d', roughness: 0.7 });
-          const bush = new THREE.Mesh(bushGeo, bushMat);
-          bush.position.set(w * 0.35, h * 0.5 + 0.15, -d * 0.3);
-          islandGroup.add(bush);
+      // Safe-ground outline
+      if (Math.min(w, d) >= 1.2) {
+        const frame = new THREE.Mesh(getFrameGeometry(w, d), sharedMats.trim);
+        frame.position.y = h * 0.5 + 0.012;
+        frame.renderOrder = 2;
+        group.add(frame);
+      }
 
-          // Wild Flowers (Pink, Yellow, White)
-          const flowerCount = 3 + (pIndex % 4);
-          for (let f = 0; f < flowerCount; f++) {
-            const fColor = flowerColors[(pIndex + f) % flowerColors.length];
-            const flowerGeo = new THREE.SphereGeometry(0.09, 6, 6);
-            const flowerMat = new THREE.MeshStandardMaterial({ color: fColor, roughness: 0.3, emissive: fColor, emissiveIntensity: 0.25 });
-            const flower = new THREE.Mesh(flowerGeo, flowerMat);
-            const fx = ((f / flowerCount) - 0.5) * (w * 0.65);
-            const fz = (((f * 2) % flowerCount) / flowerCount - 0.5) * (d * 0.65);
-            flower.position.set(fx, h * 0.5 + 0.08, fz);
-            islandGroup.add(flower);
+      // Grass tufts across the top and drooping over the rim
+      const area = w * d;
+      const tuftCount = THREE.MathUtils.clamp(Math.round(area * 1.4), 6, 60);
+      for (let i = 0; i < tuftCount; i++) {
+        const x = (rng() - 0.5) * (w - 0.3);
+        const z = (rng() - 0.5) * (d - 0.3);
+        tufts.add(
+          new THREE.Vector3(px + x, top, pz + z),
+          new THREE.Euler((rng() - 0.5) * 0.4, rng() * Math.PI, (rng() - 0.5) * 0.4),
+          0.8 + rng() * 0.7
+        );
+      }
+      const droop = Math.min(12, Math.floor((w + d) * 1.2));
+      for (let i = 0; i < droop; i++) {
+        const onX = i % 2 === 0;
+        const sign = rng() < 0.5 ? -1 : 1;
+        const x = onX ? sign * (w * 0.5 - 0.02) : (rng() - 0.5) * w * 0.9;
+        const z = onX ? (rng() - 0.5) * d * 0.9 : sign * (d * 0.5 - 0.02);
+        tufts.add(
+          new THREE.Vector3(px + x, top - grassH + 0.05, pz + z),
+          new THREE.Euler(Math.PI, rng() * Math.PI, 0),
+          1.0 + rng() * 0.8
+        );
+      }
 
-            // Green Stem
-            const stemGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.12, 4);
-            const stemMat = new THREE.MeshBasicMaterial({ color: '#16a34a' });
-            const stem = new THREE.Mesh(stemGeo, stemMat);
-            stem.position.set(fx, h * 0.5 + 0.04, fz);
-            islandGroup.add(stem);
+      // Flowers, bushes, crystals on larger islands
+      if (w >= 2.5 && d >= 2.5) {
+        const flowerCount = 3 + (pIndex % 4) + Math.floor(area / 18);
+        for (let f = 0; f < flowerCount; f++) {
+          const x = (rng() - 0.5) * (w - 0.8);
+          const z = (rng() - 0.5) * (d - 0.8);
+          const col = palette.flowers[Math.floor(rng() * palette.flowers.length)];
+          const s = 0.9 + rng() * 0.5;
+          stems.add(new THREE.Vector3(px + x, top, pz + z), new THREE.Euler(), s);
+          flowers.add(new THREE.Vector3(px + x, top + 0.2 * s, pz + z), new THREE.Euler(), s, col);
+        }
+        bushes.add(
+          new THREE.Vector3(px + w * 0.35, top + 0.12, pz - d * 0.3),
+          new THREE.Euler(0, rng() * Math.PI, 0),
+          0.8 + rng() * 0.4
+        );
+        if (w >= 3 && (pIndex % 3 === 0 || biome === 'crystal')) {
+          const cx = (rng() < 0.5 ? -1 : 1) * (w * 0.5 - 0.5);
+          const cz = (rng() < 0.5 ? -1 : 1) * (d * 0.5 - 0.5);
+          for (let k = 0; k < 3; k++) {
+            const col = palette.crystals[Math.floor(rng() * palette.crystals.length)];
+            crystals.add(
+              new THREE.Vector3(px + cx + (rng() - 0.5) * 0.3, top, pz + cz + (rng() - 0.5) * 0.3),
+              new THREE.Euler((rng() - 0.5) * 0.5, rng() * Math.PI, (rng() - 0.5) * 0.5),
+              0.6 + rng() * 0.7,
+              col
+            );
           }
         }
       }
-
-      scene.add(islandGroup);
-      newList.push(islandGroup);
     }
+
+    scene.add(group);
+    newList.push(group);
   });
+
+  const meshes = [
+    tufts.build(geo.tuft, kit.tuftMat),
+    stems.build(geo.stem, sharedMats.stem),
+    flowers.build(geo.flower, sharedMats.flower),
+    crystals.build(geo.crystal, sharedMats.crystal),
+    bushes.build(geo.bush, kit.bushMat, true)
+  ];
+  meshes.forEach((m) => m && foliage.add(m));
+  scene.add(foliage);
+  newList.push(foliage);
 
   return newList;
 }
 
-/**
- * Creates fluffy white 3D cartoon cloud clusters.
- */
-function createPuffyCloud(material: THREE.Material, scale: number): THREE.Group {
+/* -------------------------------------------------------------------------- */
+/* Background scenery                                                          */
+/* -------------------------------------------------------------------------- */
+
+function createPuffyCloud(material: THREE.Material, sphere: THREE.BufferGeometry, scale: number): THREE.Group {
   const cloud = new THREE.Group();
-  const sphereCount = 6;
   const offsets = [
     { x: 0, y: 0, z: 0, r: 2.2 },
     { x: 1.8, y: 0.2, z: 0.2, r: 1.8 },
@@ -456,79 +705,180 @@ function createPuffyCloud(material: THREE.Material, scale: number): THREE.Group 
     { x: -0.9, y: 0.9, z: 0.3, r: 1.6 },
     { x: 0, y: -0.4, z: 0.8, r: 1.5 }
   ];
-
-  offsets.forEach((o) => {
-    const geo = new THREE.SphereGeometry(o.r * scale, 12, 12);
-    const mesh = new THREE.Mesh(geo, material);
-    mesh.position.set(o.x * scale, o.y * scale, o.z * scale);
-    cloud.add(mesh);
-  });
-
+  const list = new InstanceList();
+  offsets.forEach((o) =>
+    list.add(
+      new THREE.Vector3(o.x * scale, o.y * scale, o.z * scale),
+      new THREE.Euler(),
+      new THREE.Vector3(o.r * scale, o.r * scale * 0.78, o.r * scale) // flattened underside
+    )
+  );
+  const mesh = list.build(sphere, material);
+  if (mesh) cloud.add(mesh);
   return cloud;
 }
 
-/**
- * Creates the Fairytale Castle landmark directly inspired by the official logo.
- */
+function createMountains(): THREE.Group {
+  const group = new THREE.Group();
+  group.name = 'mountains';
+  const rng = mulberry32(777);
+  const bodyGeo = new THREE.ConeGeometry(1, 1, 6, 1);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, flatShading: true });
+  const capGeo = new THREE.ConeGeometry(1, 1, 6, 1);
+  const capMat = new THREE.MeshStandardMaterial({ color: '#f8fafc', roughness: 0.9, flatShading: true });
+  const body = new InstanceList();
+  const caps = new InstanceList();
+  const tones = ['#6d7bd8', '#8b7fd6', '#7aa2e3', '#9a8bd9'];
+  for (let i = 0; i < 16; i++) {
+    const t = i / 15;
+    const x = -150 + t * 300 + (rng() - 0.5) * 18;
+    const z = -118 - rng() * 40;
+    const h = 40 + rng() * 38;
+    const w = 20 + rng() * 18;
+    const y = -10 + h / 2;
+    const rot = new THREE.Euler(0, rng() * Math.PI, 0);
+    body.add(new THREE.Vector3(x, y, z), rot, new THREE.Vector3(w, h, w), tones[i % tones.length]);
+    caps.add(
+      new THREE.Vector3(x, -10 + h * 0.84, z), rot,
+      new THREE.Vector3(w * 0.32, h * 0.32, w * 0.32)
+    );
+  }
+  const b = body.build(bodyGeo, bodyMat);
+  const c = caps.build(capGeo, capMat);
+  if (b) group.add(b);
+  if (c) group.add(c);
+  return group;
+}
+
+function createDistantIslands(): THREE.Group {
+  const islands = new THREE.Group();
+  const rng = mulberry32(31337);
+
+  const grassMat = new THREE.MeshStandardMaterial({ color: '#3fcf5f', roughness: 0.6 });
+  const rockMat = new THREE.MeshStandardMaterial({ color: '#7a5233', roughness: 0.9, flatShading: true });
+  const trunkMat = new THREE.MeshStandardMaterial({ color: '#78350f', roughness: 0.85 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: '#16a34a', roughness: 0.55 });
+  const crystalMat = sharedMats.crystal;
+
+  const topGeo = new THREE.CylinderGeometry(1, 0.88, 1.2, 9);
+  const rockGeo = new THREE.ConeGeometry(0.88, 1.6, 7);
+  rockGeo.rotateX(Math.PI);
+  const trunkGeo = new THREE.CylinderGeometry(0.12, 0.2, 1.4, 6);
+  trunkGeo.translate(0, 0.7, 0);
+  const leafGeo = new THREE.ConeGeometry(0.8, 1.6, 7);
+  leafGeo.translate(0, 0.8, 0);
+  const crystalGeo = new THREE.ConeGeometry(0.3, 1.4, 5);
+  crystalGeo.translate(0, 0.7, 0);
+
+  const wfTex = makeWaterfallTexture();
+  const wfMat = new THREE.MeshBasicMaterial({
+    map: wfTex, transparent: true, opacity: 0.8, side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  const wfGeo = new THREE.PlaneGeometry(1, 1);
+  let lastTick = 0;
+
+  for (let i = 0; i < 9; i++) {
+    const angle = (i / 9) * Math.PI * 2;
+    const dist = 65 + rng() * 35;
+    const radius = 8 + rng() * 6;
+    const island = new THREE.Group();
+    island.position.set(Math.cos(angle) * dist, -4 + rng() * 18, Math.sin(angle) * dist - 35);
+
+    const top = new THREE.Mesh(topGeo, grassMat);
+    top.scale.set(radius, 1, radius);
+    island.add(top);
+    const bottom = new THREE.Mesh(rockGeo, rockMat);
+    bottom.scale.set(radius, radius * 0.95, radius);
+    bottom.position.y = -radius * 0.8 - 0.4;
+    island.add(bottom);
+
+    const trunks = new InstanceList();
+    const leaves = new InstanceList();
+    const treeCount = 3 + Math.floor(rng() * 3);
+    for (let t = 0; t < treeCount; t++) {
+      const a = rng() * Math.PI * 2;
+      const r = rng() * radius * 0.7;
+      const s = 0.8 + rng() * 0.9;
+      const p = new THREE.Vector3(Math.cos(a) * r, 0.6, Math.sin(a) * r);
+      trunks.add(p, new THREE.Euler(), s);
+      leaves.add(p.clone().setY(0.6 + 1.1 * s), new THREE.Euler(), s);
+    }
+    const trunkMesh = trunks.build(trunkGeo, trunkMat);
+    const leafMesh = leaves.build(leafGeo, leafMat);
+    if (trunkMesh) island.add(trunkMesh);
+    if (leafMesh) island.add(leafMesh);
+
+    const crystals = new InstanceList();
+    const crystalPalette = ['#f472b6', '#a78bfa', '#67e8f9'];
+    for (let c = 0; c < 4; c++) {
+      const a = rng() * Math.PI * 2;
+      const r = radius * (0.5 + rng() * 0.35);
+      crystals.add(
+        new THREE.Vector3(Math.cos(a) * r, 0.6, Math.sin(a) * r),
+        new THREE.Euler((rng() - 0.5) * 0.5, rng() * Math.PI, (rng() - 0.5) * 0.5),
+        0.5 + rng() * 0.8,
+        crystalPalette[Math.floor(rng() * crystalPalette.length)]
+      );
+    }
+    const crystalMesh = crystals.build(crystalGeo, crystalMat);
+    if (crystalMesh) island.add(crystalMesh);
+
+    // Waterfalls pouring off some islands; the texture scroll runs from the render callback
+    if (i % 3 === 0) {
+      const len = radius * 1.5;
+      const fall = new THREE.Mesh(wfGeo, wfMat);
+      fall.scale.set(1.8, len, 1);
+      fall.position.set(radius * 0.92, -len * 0.5 + 0.4, 0);
+      fall.rotation.y = Math.PI / 2;
+      fall.frustumCulled = false;
+      fall.onBeforeRender = () => {
+        const now = performance.now();
+        if (now !== lastTick) {
+          lastTick = now;
+          wfTex.offset.y = -(now * 0.0007) % 1;
+        }
+      };
+      island.add(fall);
+    }
+
+    island.rotation.y = rng() * Math.PI * 2;
+    islands.add(island);
+  }
+  return islands;
+}
+
 function createFairytaleCastle(): THREE.Group {
   const castle = new THREE.Group();
 
-  const stoneMat = new THREE.MeshStandardMaterial({
-    color: '#cbd5e1',
-    roughness: 0.7,
-    metalness: 0.1
-  });
-
-  const stoneDarkMat = new THREE.MeshStandardMaterial({
-    color: '#94a3b8',
-    roughness: 0.8,
-    metalness: 0.1
-  });
-
-  const roofMat = new THREE.MeshStandardMaterial({
-    color: '#6d28d9', // Royal purple spires from Twin-Quest.png
-    roughness: 0.35,
-    metalness: 0.25
-  });
-
-  const flagMat = new THREE.MeshStandardMaterial({
-    color: '#ec4899', // Hot-pink / purple flags
-    roughness: 0.4,
-    side: THREE.DoubleSide
-  });
-
+  const stoneMat = new THREE.MeshStandardMaterial({ color: '#e2e8f0', roughness: 0.7, metalness: 0.05 });
+  const stoneDarkMat = new THREE.MeshStandardMaterial({ color: '#94a3b8', roughness: 0.85, flatShading: true });
+  const roofMat = new THREE.MeshStandardMaterial({ color: '#7c3aed', roughness: 0.35, metalness: 0.25 });
+  const flagMat = new THREE.MeshStandardMaterial({ color: '#ec4899', roughness: 0.4, side: THREE.DoubleSide });
   const windowGlowMat = new THREE.MeshStandardMaterial({
-    color: '#fef08a',
-    emissive: '#f59e0b',
-    emissiveIntensity: 0.8,
-    roughness: 0.2
+    color: '#fef08a', emissive: '#f59e0b', emissiveIntensity: 0.9, roughness: 0.2
+  });
+  const doorMat = new THREE.MeshStandardMaterial({ color: '#7c2d12', roughness: 0.7 });
+  const heartMat = new THREE.MeshStandardMaterial({
+    color: '#fb7185', emissive: '#f43f5e', emissiveIntensity: 1.1, roughness: 0.3
   });
 
-  // Base Castle Island
-  const baseGeo = new THREE.CylinderGeometry(18, 10, 14, 10);
-  const baseIsland = new THREE.Mesh(baseGeo, stoneDarkMat);
+  const baseIsland = new THREE.Mesh(new THREE.CylinderGeometry(18, 10, 14, 10), stoneDarkMat);
   baseIsland.position.y = -7;
   castle.add(baseIsland);
 
-  // Main Keep Body
-  const keepGeo = new THREE.BoxGeometry(14, 16, 12);
-  const keep = new THREE.Mesh(keepGeo, stoneMat);
+  const keep = new THREE.Mesh(new THREE.BoxGeometry(14, 16, 12), stoneMat);
   keep.position.y = 8;
   castle.add(keep);
 
-  // Central Grand Spire Tower
-  const centerTowerGeo = new THREE.CylinderGeometry(3.5, 4.0, 22, 14);
-  const centerTower = new THREE.Mesh(centerTowerGeo, stoneMat);
+  const centerTower = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 4.0, 22, 14), stoneMat);
   centerTower.position.set(0, 19, 0);
   castle.add(centerTower);
 
-  // Central Roof Cone
-  const centerRoofGeo = new THREE.ConeGeometry(4.8, 12, 14);
-  const centerRoof = new THREE.Mesh(centerRoofGeo, roofMat);
+  const centerRoof = new THREE.Mesh(new THREE.ConeGeometry(4.8, 12, 14), roofMat);
   centerRoof.position.set(0, 36, 0);
   castle.add(centerRoof);
 
-  // Central Flagpole & Flag
   const poleGeo = new THREE.CylinderGeometry(0.08, 0.08, 3.5, 6);
   const pole = new THREE.Mesh(poleGeo, stoneMat);
   pole.position.set(0, 43, 0);
@@ -538,212 +888,181 @@ function createFairytaleCastle(): THREE.Group {
   flagShape.moveTo(0, 0);
   flagShape.lineTo(1.8, -0.6);
   flagShape.lineTo(0, -1.2);
-  const flag = new THREE.Mesh(new THREE.ShapeGeometry(flagShape), flagMat);
+  const flagGeo = new THREE.ShapeGeometry(flagShape);
+  const flag = new THREE.Mesh(flagGeo, flagMat);
   flag.position.set(0.08, 44.5, 0);
   castle.add(flag);
 
-  // 4 Corner Towers with Spire Roofs
-  const towerPositions = [
-    { x: -6.5, z: -5.5 },
-    { x: 6.5, z: -5.5 },
-    { x: -6.5, z: 5.5 },
-    { x: 6.5, z: 5.5 }
-  ];
-
-  towerPositions.forEach((tp) => {
-    const towerGeo = new THREE.CylinderGeometry(2.0, 2.3, 18, 12);
+  const towerGeo = new THREE.CylinderGeometry(2.0, 2.3, 18, 12);
+  const roofGeo = new THREE.ConeGeometry(2.8, 8, 12);
+  [
+    { x: -6.5, z: -5.5 }, { x: 6.5, z: -5.5 }, { x: -6.5, z: 5.5 }, { x: 6.5, z: 5.5 }
+  ].forEach((tp) => {
     const tower = new THREE.Mesh(towerGeo, stoneMat);
     tower.position.set(tp.x, 9, tp.z);
     castle.add(tower);
-
-    const roofGeo = new THREE.ConeGeometry(2.8, 8, 12);
     const roof = new THREE.Mesh(roofGeo, roofMat);
     roof.position.set(tp.x, 22, tp.z);
     castle.add(roof);
-
-    // Corner Flags
     const cPole = new THREE.Mesh(poleGeo, stoneMat);
     cPole.position.set(tp.x, 27, tp.z);
     castle.add(cPole);
-
-    const cFlag = new THREE.Mesh(new THREE.ShapeGeometry(flagShape), flagMat);
+    const cFlag = new THREE.Mesh(flagGeo, flagMat);
     cFlag.position.set(tp.x + 0.08, 28, tp.z);
     castle.add(cFlag);
   });
 
-  // Glowing Castle Windows
-  [-3, 0, 3].forEach((wx) => {
-    const winGeo = new THREE.BoxGeometry(1.0, 1.8, 0.2);
-    const win = new THREE.Mesh(winGeo, windowGlowMat);
-    win.position.set(wx, 10, 6.1);
-    castle.add(win);
+  // Battlements along the keep roof line (one draw call)
+  const merlons = new InstanceList();
+  for (let i = 0; i < 9; i++) {
+    const x = -5.6 + i * 1.4;
+    merlons.add(new THREE.Vector3(x, 16.5, 5.8), new THREE.Euler(), new THREE.Vector3(0.8, 1.0, 0.7));
+    merlons.add(new THREE.Vector3(x, 16.5, -5.8), new THREE.Euler(), new THREE.Vector3(0.8, 1.0, 0.7));
+  }
+  const merlonMesh = merlons.build(new THREE.BoxGeometry(1, 1, 1), stoneMat);
+  if (merlonMesh) castle.add(merlonMesh);
+
+  // Glowing windows (one draw call) and arched door
+  const windows = new InstanceList();
+  [-3.6, 0, 3.6].forEach((wx) => {
+    windows.add(new THREE.Vector3(wx, 11, 6.1), new THREE.Euler(), new THREE.Vector3(1.0, 1.9, 0.2));
+    windows.add(new THREE.Vector3(wx, 5.6, 6.1), new THREE.Euler(), new THREE.Vector3(0.9, 1.6, 0.2));
   });
+  const windowMesh = windows.build(new THREE.BoxGeometry(1, 1, 1), windowGlowMat);
+  if (windowMesh) castle.add(windowMesh);
+
+  const door = new THREE.Mesh(new THREE.BoxGeometry(2.4, 3.2, 0.3), doorMat);
+  door.position.set(0, 1.6, 6.1);
+  castle.add(door);
+  const doorArch = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.3, 14, 1, false, 0, Math.PI), doorMat);
+  doorArch.rotation.x = Math.PI / 2;
+  doorArch.rotation.z = Math.PI / 2;
+  doorArch.position.set(0, 3.2, 6.1);
+  castle.add(doorArch);
+
+  // Glowing heart emblem above the gate
+  const heart = new THREE.Shape();
+  heart.moveTo(0, -0.5);
+  heart.bezierCurveTo(-0.1, -0.3, -0.6, 0.0, -0.5, 0.3);
+  heart.bezierCurveTo(-0.45, 0.55, -0.1, 0.55, 0, 0.32);
+  heart.bezierCurveTo(0.1, 0.55, 0.45, 0.55, 0.5, 0.3);
+  heart.bezierCurveTo(0.6, 0.0, 0.1, -0.3, 0, -0.5);
+  const emblem = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(heart, { depth: 0.2, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.04, bevelSegments: 2 }),
+    heartMat
+  );
+  emblem.scale.setScalar(1.4);
+  emblem.position.set(0, 8.2, 6.2);
+  castle.add(emblem);
 
   return castle;
 }
 
-/**
- * Creates mini background floating islands with tiny trees and crystals.
- */
-function createMiniFloatingIsland(radius: number): THREE.Group {
-  const island = new THREE.Group();
-
-  const grassMat = new THREE.MeshStandardMaterial({ color: '#22c55e', roughness: 0.6 });
-  const rockMat = new THREE.MeshStandardMaterial({ color: '#5c3a21', roughness: 0.9 });
-
-  const topGeo = new THREE.CylinderGeometry(radius, radius * 0.85, 1.2, 8);
-  const top = new THREE.Mesh(topGeo, grassMat);
-  island.add(top);
-
-  const bottomGeo = new THREE.ConeGeometry(radius * 0.85, radius * 1.5, 7);
-  bottomGeo.rotateX(Math.PI);
-  const bottom = new THREE.Mesh(bottomGeo, rockMat);
-  bottom.position.y = -radius * 0.75;
-  island.add(bottom);
-
-  // Tiny Stylized Tree
-  const trunkGeo = new THREE.CylinderGeometry(0.2, 0.3, 1.6, 6);
-  const trunkMat = new THREE.MeshStandardMaterial({ color: '#78350f' });
-  const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-  trunk.position.set(0.5, 1.2, 0);
-  island.add(trunk);
-
-  const leavesGeo = new THREE.ConeGeometry(1.2, 2.4, 7);
-  const leavesMat = new THREE.MeshStandardMaterial({ color: '#16a34a', roughness: 0.5 });
-  const leaves = new THREE.Mesh(leavesGeo, leavesMat);
-  leaves.position.set(0.5, 2.8, 0);
-  island.add(leaves);
-
-  return island;
-}
-
-/**
- * Creates the official glowing Heart Portal with concentric energy rings
- * and swirling golden light arcs directly inspired by Twin-Quest.png.
- */
-function createOfficialHeartPortal(): { portalGroup: THREE.Group; goldenTrails: THREE.Group } {
+function createOfficialHeartPortal(glowTex: THREE.Texture): { portalGroup: THREE.Group; goldenTrails: THREE.Group } {
   const portalGroup = new THREE.Group();
 
-  // 1. Ancient Stone Archway Frame
-  const archStoneMat = new THREE.MeshStandardMaterial({
-    color: '#94a3b8',
-    roughness: 0.65,
-    metalness: 0.2
-  });
+  const archStoneMat = new THREE.MeshStandardMaterial({ color: '#a8b4c6', roughness: 0.6, metalness: 0.15 });
 
-  // Left & Right Stone Pillars
   [-1.6, 1.6].forEach((x) => {
-    const pillarGeo = new THREE.BoxGeometry(0.55, 3.8, 0.55);
-    const pillar = new THREE.Mesh(pillarGeo, archStoneMat);
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.55, 3.8, 0.55), archStoneMat);
     pillar.position.set(x, 1.9, 0);
     pillar.castShadow = true;
     portalGroup.add(pillar);
-
-    // Carved Capital / Base
-    const capGeo = new THREE.BoxGeometry(0.75, 0.25, 0.75);
-    const cap = new THREE.Mesh(capGeo, archStoneMat);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.25, 0.75), archStoneMat);
     cap.position.set(x, 3.8, 0);
     portalGroup.add(cap);
   });
 
-  // Top Curved Arch Beam
-  const archBeamGeo = new THREE.BoxGeometry(3.9, 0.55, 0.65);
-  const archBeam = new THREE.Mesh(archBeamGeo, archStoneMat);
+  const archBeam = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.55, 0.65), archStoneMat);
   archBeam.position.set(0, 3.9, 0);
   archBeam.castShadow = true;
   portalGroup.add(archBeam);
 
-  // Stone Steps Leading Up
   for (let s = 0; s < 3; s++) {
-    const stepGeo = new THREE.BoxGeometry(3.2 + s * 0.4, 0.22, 0.8 + s * 0.4);
-    const step = new THREE.Mesh(stepGeo, archStoneMat);
+    const step = new THREE.Mesh(new THREE.BoxGeometry(3.2 + s * 0.4, 0.22, 0.8 + s * 0.4), archStoneMat);
     step.position.set(0, (2 - s) * 0.22, 0.5 + s * 0.4);
     step.receiveShadow = true;
     portalGroup.add(step);
   }
 
-  // 2. Radiant Concentric Glowing Heart Portals (Directly from Twin-Quest.png)
   const heartShape = new THREE.Shape();
   heartShape.moveTo(0, 0);
   heartShape.bezierCurveTo(0.35, 0.35, 0.65, 0.7, 0.38, 1.05);
   heartShape.bezierCurveTo(0.18, 1.25, -0.18, 1.25, -0.38, 1.05);
   heartShape.bezierCurveTo(-0.65, 0.7, -0.35, 0.35, 0, 0);
 
+  // Names are kept: other code may animate these groups
   const heartEnergy = new THREE.Group();
   heartEnergy.name = 'portalHeartEnergy';
   heartEnergy.position.set(0, 2.1, 0);
   portalGroup.add(heartEnergy);
 
-  // Outer Radiant Violet/Purple Heart Ring
   const outerHeartGeo = new THREE.ExtrudeGeometry(heartShape, { depth: 0.15, bevelEnabled: true, bevelThickness: 0.06 });
   outerHeartGeo.center();
-  const outerHeartMat = new THREE.MeshStandardMaterial({
-    color: '#c084fc',
-    emissive: '#9333ea',
-    emissiveIntensity: 0.9,
-    roughness: 0.1,
-    metalness: 0.5
-  });
-  const outerHeart = new THREE.Mesh(outerHeartGeo, outerHeartMat);
-  outerHeart.scale.set(1.9, 1.9, 1.9);
+  const outerHeart = new THREE.Mesh(
+    outerHeartGeo,
+    new THREE.MeshStandardMaterial({ color: '#c084fc', emissive: '#9333ea', emissiveIntensity: 0.9, roughness: 0.1, metalness: 0.5 })
+  );
+  outerHeart.scale.setScalar(1.9);
   heartEnergy.add(outerHeart);
 
-  // Inner Neon Pink Glowing Heart
   const innerHeartGeo = new THREE.ExtrudeGeometry(heartShape, { depth: 0.18, bevelEnabled: true, bevelThickness: 0.05 });
   innerHeartGeo.center();
-  const innerHeartMat = new THREE.MeshStandardMaterial({
-    color: '#f43f5e',
-    emissive: '#ec4899',
-    emissiveIntensity: 1.4,
-    roughness: 0.1,
-    metalness: 0.2
-  });
-  const innerHeart = new THREE.Mesh(innerHeartGeo, innerHeartMat);
-  innerHeart.scale.set(1.4, 1.4, 1.4);
+  const innerHeart = new THREE.Mesh(
+    innerHeartGeo,
+    new THREE.MeshStandardMaterial({ color: '#f43f5e', emissive: '#ec4899', emissiveIntensity: 1.4, roughness: 0.1, metalness: 0.2 })
+  );
+  innerHeart.scale.setScalar(1.4);
   innerHeart.position.z = 0.04;
   heartEnergy.add(innerHeart);
 
-  // Core Luminous White/Pink Portal Heart Center
   const coreHeartGeo = new THREE.ShapeGeometry(heartShape);
   coreHeartGeo.center();
-  const coreHeartMat = new THREE.MeshBasicMaterial({
-    color: '#fff1f2',
-    transparent: true,
-    opacity: 0.95
-  });
-  const coreHeart = new THREE.Mesh(coreHeartGeo, coreHeartMat);
+  const coreHeart = new THREE.Mesh(
+    coreHeartGeo,
+    new THREE.MeshBasicMaterial({ color: '#fff1f2', transparent: true, opacity: 0.95 })
+  );
   coreHeart.position.z = 0.08;
   heartEnergy.add(coreHeart);
 
-  // 3. Swirling Golden Magical Trails (Circling the Heart Portal like in the TwinQuest Logo!)
+  // Soft halo behind the heart
+  const halo = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: glowTex, color: '#fb7185', transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    })
+  );
+  halo.scale.setScalar(7);
+  halo.position.set(0, 2.1, -0.3);
+  portalGroup.add(halo);
+
+  // Glowing ground ring so the destination reads clearly from a distance
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(2.4, 3.2, 40),
+    new THREE.MeshBasicMaterial({
+      color: '#fda4af', transparent: true, opacity: 0.4, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(0, 0.03, 0.9);
+  portalGroup.add(ring);
+
   const goldenTrails = new THREE.Group();
   goldenTrails.name = 'portalGoldenTrails';
   goldenTrails.position.set(0, 2.1, 0);
   portalGroup.add(goldenTrails);
 
   const goldTrailMat = new THREE.MeshStandardMaterial({
-    color: '#f59e0b',
-    emissive: '#fbbf24',
-    emissiveIntensity: 1.2,
-    metalness: 0.9,
-    roughness: 0.15
+    color: '#f59e0b', emissive: '#fbbf24', emissiveIntensity: 1.2, metalness: 0.9, roughness: 0.15
   });
-
-  // Golden Orbital Ring 1
-  const trail1Geo = new THREE.TorusGeometry(2.1, 0.065, 12, 48);
-  const trail1 = new THREE.Mesh(trail1Geo, goldTrailMat);
-  trail1.rotation.x = Math.PI * 0.35;
-  trail1.rotation.y = Math.PI * 0.15;
+  const trail1 = new THREE.Mesh(new THREE.TorusGeometry(2.1, 0.065, 12, 48), goldTrailMat);
+  trail1.rotation.set(Math.PI * 0.35, Math.PI * 0.15, 0);
   goldenTrails.add(trail1);
-
-  // Golden Orbital Ring 2 (Counter-angled)
-  const trail2Geo = new THREE.TorusGeometry(1.7, 0.045, 10, 40);
-  const trail2 = new THREE.Mesh(trail2Geo, goldTrailMat);
-  trail2.rotation.x = -Math.PI * 0.3;
-  trail2.rotation.z = Math.PI * 0.25;
+  const trail2 = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.045, 10, 40), goldTrailMat);
+  trail2.rotation.set(-Math.PI * 0.3, 0, Math.PI * 0.25);
   goldenTrails.add(trail2);
 
-  // Magical Portal Illumination
   const portalLight = new THREE.PointLight('#f43f5e', 3.5, 16);
   portalLight.position.set(0, 2.1, 1.2);
   portalGroup.add(portalLight);
